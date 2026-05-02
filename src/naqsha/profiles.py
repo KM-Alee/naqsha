@@ -31,6 +31,8 @@ class RunProfile:
     allowed_tool_names: frozenset[str] | None = None
     memory_adapter: str = "none"
     memory_token_budget: int = 512
+    memory_cross_project: str = "default"
+    memory_cross_database: Path = Path(".naqsha/simplemem-cross.sqlite")
     auto_approve: bool = False
     approval_required_tiers: frozenset[RiskTier] = field(
         default_factory=lambda: frozenset({RiskTier.WRITE, RiskTier.HIGH})
@@ -304,15 +306,20 @@ def parse_run_profile(data: Mapping[str, Any], *, base_dir: Path) -> RunProfile:
         .lower()
         .replace("-", "_")
     )
-    if memory_adapter == "simplemem_cross":
+    memory_cross_project = _as_str(
+        data.get("memory_cross_project", "default"),
+        "memory_cross_project",
+    )
+    memory_cross_database = _resolve_path(
+        data.get("memory_cross_database", ".naqsha/simplemem-cross.sqlite"),
+        "memory_cross_database",
+        base_dir,
+    )
+
+    if memory_adapter not in {"none", "inmemory", "simplemem_cross"}:
         raise ProfileValidationError(
-            "Memory adapter 'simplemem_cross' is not implemented yet. "
-            "Use 'none' or 'inmemory' (Phase 5)."
-        )
-    if memory_adapter not in {"none", "inmemory"}:
-        raise ProfileValidationError(
-            "memory_adapter must be 'none', 'inmemory', or 'simplemem_cross' "
-            f"(simplemem_cross deferred); got {memory_adapter!r}."
+            "memory_adapter must be 'none', 'inmemory', or 'simplemem_cross'; "
+            f"got {memory_adapter!r}."
         )
 
     memory_token_budget = _as_int(data.get("memory_token_budget", 512), "memory_token_budget")
@@ -341,6 +348,8 @@ def parse_run_profile(data: Mapping[str, Any], *, base_dir: Path) -> RunProfile:
         allowed_tool_names=allowed_tool_names,
         memory_adapter=memory_adapter,
         memory_token_budget=memory_token_budget,
+        memory_cross_project=memory_cross_project,
+        memory_cross_database=memory_cross_database,
         auto_approve=auto_approve,
         approval_required_tiers=approval_required_tiers,
         budgets=budgets,
@@ -369,6 +378,8 @@ def describe_profile_dict(profile: RunProfile) -> dict[str, Any]:
         else None,
         "memory_adapter": profile.memory_adapter,
         "memory_token_budget": profile.memory_token_budget,
+        "memory_cross_project": profile.memory_cross_project,
+        "memory_cross_database": str(profile.memory_cross_database),
         "auto_approve": profile.auto_approve,
         "approval_required_tiers": sorted(t.value for t in profile.approval_required_tiers),
         "budgets": {

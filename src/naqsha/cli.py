@@ -11,6 +11,7 @@ from typing import Any
 
 from naqsha.approvals import ApprovalGate, InteractiveApprovalGate, StaticApprovalGate
 from naqsha.memory.inmemory import InMemoryMemoryPort
+from naqsha.memory.simplemem_cross import SimpleMemCrossMemoryPort
 from naqsha.models.fake import FakeModelClient
 from naqsha.policy import ToolPolicy
 from naqsha.profiles import (
@@ -53,7 +54,14 @@ def build_runtime(profile: RunProfile, *, approve_prompt: bool = False) -> CoreR
     msgs = scripted if scripted is not None else DEFAULT_FAKE_SCRIPT
     model = FakeModelClient(list(msgs))
 
-    memory = InMemoryMemoryPort() if profile.memory_adapter == "inmemory" else None
+    memory = None
+    if profile.memory_adapter == "inmemory":
+        memory = InMemoryMemoryPort()
+    elif profile.memory_adapter == "simplemem_cross":
+        memory = SimpleMemCrossMemoryPort(
+            project=profile.memory_cross_project,
+            database_path=profile.memory_cross_database,
+        )
 
     if profile.auto_approve:
         gate: ApprovalGate = StaticApprovalGate(approved=True)

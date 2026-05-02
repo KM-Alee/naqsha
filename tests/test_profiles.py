@@ -42,16 +42,41 @@ def test_openai_compat_rejected_explicitly(tmp_path: Path) -> None:
         load_run_profile(str(p))
 
 
-def test_simplemem_cross_rejected_until_phase_five(tmp_path: Path) -> None:
-    p = tmp_path / "m.json"
+def test_simplemem_cross_profile_loads_and_resolves_paths(tmp_path: Path) -> None:
+    explicit_db = tmp_path / "explicit.sqlite"
+    p = tmp_path / "cross.json"
     p.write_text(
         json.dumps(
-            {"name": "x", "model": "fake", "memory_adapter": "simplemem_cross"},
+            {
+                "name": "with-cross",
+                "model": "fake",
+                "trace_dir": ".",
+                "tool_root": ".",
+                "memory_adapter": "simplemem_cross",
+                "memory_cross_project": "unit-test-project",
+                "memory_cross_database": str(explicit_db.name),
+            }
         ),
         encoding="utf-8",
     )
-    with pytest.raises(ProfileValidationError, match="simplemem_cross"):
-        load_run_profile(str(p))
+    profile = load_run_profile(str(p))
+    assert profile.memory_adapter == "simplemem_cross"
+    assert profile.memory_cross_project == "unit-test-project"
+    assert profile.memory_cross_database == explicit_db.resolve()
+
+
+def test_memory_adapter_hyphen_normalized(tmp_path: Path) -> None:
+    profile = parse_run_profile(
+        {
+            "name": "hyphen-cross",
+            "model": "fake",
+            "trace_dir": ".",
+            "tool_root": ".",
+            "memory_adapter": "simplemem-cross",
+        },
+        base_dir=tmp_path,
+    )
+    assert profile.memory_adapter == "simplemem_cross"
 
 
 def test_toml_round_trip_via_load_run_profile(tmp_path: Path) -> None:

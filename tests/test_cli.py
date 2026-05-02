@@ -78,6 +78,38 @@ def test_cli_run_with_profile_file_path(tmp_path: Path, monkeypatch) -> None:
     assert json.loads(buf.getvalue())["answer"] == "from profile file"
 
 
+def test_cli_run_simplemem_cross_profile(tmp_path: Path, monkeypatch) -> None:
+    traces = tmp_path / "t"
+    traces.mkdir()
+    db_file = "cross-cli.sqlite"
+    profile_path = tmp_path / "cross.json"
+    profile_path.write_text(
+        json.dumps(
+            {
+                "name": "cross-cli",
+                "model": "fake",
+                "trace_dir": traces.name,
+                "tool_root": ".",
+                "memory_adapter": "simplemem_cross",
+                "memory_cross_database": db_file,
+                "memory_cross_project": "cli-smoke",
+                "fake_model": {
+                    "messages": [
+                        {"kind": "answer", "text": "smoke with durable memory."},
+                    ]
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    buf = StringIO()
+    with redirect_stdout(buf):
+        assert cli.main(["run", "--profile", str(profile_path), "hello"]) == 0
+    assert json.loads(buf.getvalue())["answer"] == "smoke with durable memory."
+    assert (tmp_path / db_file).is_file()
+
+
 def test_cli_trace_dir_override(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
     override = tmp_path / "override_traces"

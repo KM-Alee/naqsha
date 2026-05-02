@@ -16,8 +16,23 @@ class InMemoryMemoryPort:
         self.started_runs.append(run_id)
 
     def retrieve(self, query: str, token_budget: int) -> list[MemoryRecord]:
-        max_records = max(0, token_budget // 32)
-        return self.records[-max_records:] if max_records else []
+        cap = max(0, token_budget) * 4
+        picked: list[MemoryRecord] = []
+        spent = 0
+        for rec in reversed(self.records):
+            chunk = len(rec.content)
+            if spent + chunk > cap and picked:
+                break
+            if spent + chunk > cap and not picked:
+                body = rec.content[: max(0, cap - spent)]
+                if not body.strip():
+                    break
+                picked.append(MemoryRecord(content=body, provenance=rec.provenance))
+                spent = cap
+                break
+            picked.append(rec)
+            spent += chunk
+        return list(reversed(picked))
 
     def record_observation(self, run_id: str, tool: str, observation: ToolObservation) -> None:
         if observation.ok:

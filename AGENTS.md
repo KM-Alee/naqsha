@@ -40,7 +40,10 @@ Future agents should keep these boundaries intact:
 - `tools/` defines executable capabilities and risk metadata. The **Starter Tool Set**
   lives in `tools/starter.py` with stdlib HTTP in `tools/http_utils.py` and JSON Patch
   helpers in `tools/json_patch.py`.
-- `memory/` adapts durable memory behind the Memory Port.
+- `memory/` adapts durable memory behind the Memory Port. The **SimpleMem-Cross Adapter**
+  (`memory/simplemem_cross.py`) lives here: SQLite + Cross-style lifecycle, no MCP. PyPI package
+  `simplemem` is the unrelated embedding-heavy base library and does **not** include the
+  repository-only `cross/` facade—do not conflate them when adding dependencies.
 - `models/` adapts provider output into validated NAP messages.
 - `reflection/` may create isolated patches but never hotpatches active runtime behavior.
 - `profiles.py` owns **Run Profile** file parsing, validation, and `RunProfile` dataclass
@@ -53,7 +56,7 @@ Good next tasks for a less-capable agent:
 
 - Add tests before adding behavior.
 - Pick exactly one phase from `docs/handoff/0001-v1-development-workflow.md` and finish it.
-- Add a real SimpleMem-Cross adapter without touching `CoreRuntime`.
+- Improve memory retrieval backends (beyond keyword + recency) without coupling `CoreRuntime`.
 - Add an OpenAI-compatible `ModelClient` adapter in `src/naqsha/models/`.
 - Expand OWASP-mapped red-team fixtures under `tests/redteam/`.
 

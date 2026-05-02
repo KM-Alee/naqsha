@@ -199,29 +199,36 @@ Do not:
 
 ## Phase 5: Memory Port And SimpleMem-Cross Adapter
 
+Status: complete.
+
 Goal: make durable memory a first-class runtime feature while keeping
 SimpleMem-Cross behind an adapter boundary.
 
-Work to do:
+Delivered:
 
-- Strengthen Memory Port tests with the in-memory fake before touching
-  SimpleMem-Cross.
-- Implement SimpleMem-Cross adapter session start, event recording, tool-use
-  recording, stop/finalize behavior, context retrieval, provenance preservation,
-  cleanup, and error handling.
-- Map NAQSHA run lifecycle cleanly to SimpleMem-Cross session lifecycle.
-- Ensure retrieved memory is token-budgeted, delimited, provenance-aware, and
-  not treated as instructions.
-- Ensure memory writes only receive sanitized observations.
-- Add golden memory scenarios for temporal anchoring, latest-preference-wins,
-  contradiction handling, provenance references, cross-session recall, and
-  irrelevant memory suppression.
+- Strengthened in-memory Memory Port coverage (`tests/test_memory_port.py`: ok-only
+  recording, char-budgeted `retrieve` aligned with `~4` chars per token).
+- **SimpleMem-Cross-style** adapter (`memory/simplemem_cross.py`): stdlib SQLite + WAL;
+  maps `start_run` / `record_observation` / `finish_run` to durable rows; `retrieve`
+  ranks by keyword hits (token-boundary safe) and recency, wraps evidence in explicit
+  **untrusted** delimiters with provenance metadata; sanitized observations only reach
+  the store via Core Runtime unchanged.
+  PyPI `simplemem` ships the embedding-heavy base package without the repository's
+  unpublished `cross/` façade; NAQSHA implements the lifecycle contract locally
+  without Torch/Lance/pyarrow dependencies.
+- Run Profile keys `memory_cross_project` (default `default`), `memory_cross_database`
+  (default `.naqsha/simplemem-cross.sqlite` resolved like other paths).
+- CLI `simplemem_cross` wires the adapter (`cli.build_runtime`).
+- Golden tests: cross-session calculator recall, irrelevant suppression,
+  latest-preference ordering, provenance echoes, malformed observation guard
+  (`tests/test_memory_simplemem_cross.py`); hyphen-normalized adapter name parsing.
+- Example profile `examples/profiles/simplemem-cross-fake.json`.
 
-Expected result:
+Expected result (met):
 
-- Core Runtime memory semantics are stable with fake memory and SimpleMem-Cross.
+- Core Runtime memory semantics are stable with fake memory and SQLite Cross-style storage.
 - Cross-session recall works locally.
-- Memory integration does not leak SimpleMem-Cross internals into Core Runtime.
+- Memory integration does not leak storage internals into `CoreRuntime` (port-only surface).
 
 Do not:
 

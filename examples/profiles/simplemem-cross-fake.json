@@ -1,0 +1,10 @@
+{
+  "name": "simplemem-cross-fake",
+  "model": "fake",
+  "trace_dir": ".naqsha/traces",
+  "tool_root": ".",
+  "memory_adapter": "simplemem_cross",
+  "memory_cross_project": "demo",
+  "memory_cross_database": ".naqsha/simplemem-cross.sqlite",
+  "memory_token_budget": 4096
+}
