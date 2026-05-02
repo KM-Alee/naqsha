@@ -238,20 +238,33 @@ Do not:
 
 ## Phase 6: Model Provider Adapter
 
+Status: complete.
+
 Goal: add one real model adapter without changing Core Runtime semantics.
 
-Work to do:
+Delivered:
 
-- Add an OpenAI-compatible or similarly simple provider adapter under
-  `src/naqsha/models/`.
-- Translate provider-native output into validated NAP messages before returning
-  from `ModelClient`.
-- Keep credentials out of traces and tests.
-- Add provider adapter tests with mocked HTTP/client responses.
-- Add examples showing how to configure the adapter through Run Profiles.
-- Preserve fake model tests as the default deterministic path.
+- Shared adapter plumbing (stdlib HTTP): `models/trace_turns.py` rebuilds a neutral
+  **conversation transcript** from QAOA trace + Memory Port text (single source of truth for
+  multi-turn tool loops); `models/http_json.py` centralizes JSON POST, HTTP error parsing
+  (including Anthropic `type: error` envelopes), and header redaction; `models/errors.py` defines
+  `ModelInvocationError`; `models/factory.py` implements `model_client_from_profile` wired from
+  `cli.build_runtime`.
+- OpenAI-compatible Chat Completions (`models/openai_compat.py`): POST
+  `{base_url}/chat/completions`; `tool_calls` / assistant text → NAP.
+- Anthropic Claude Messages API (`models/anthropic.py`): POST `{base_url}/v1/messages`;
+  `tool_use` / text blocks → NAP; headers `x-api-key`, `anthropic-version`.
+- Google Gemini `generateContent` (`models/gemini.py`): POST
+  `{base_url}/v1beta/models/{model}:generateContent`; `functionCall` / text parts → NAP;
+  header `x-goog-api-key`; `functionResponse` replays include tool name + optional call id.
+- Run Profile `model` ∈ `fake`, `openai_compat`, `anthropic`, `gemini` with matching nested
+  sections (`openai_compat`, `anthropic`, `gemini`); only env-var **names** for secrets;
+  `fake_model` rejected for all remote adapters.
+- Examples: `openai-compat.example.json`, `anthropic.example.json`, `gemini.example.json`;
+  tests in `tests/test_openai_compat_model.py`, `tests/test_anthropic_model.py`,
+  `tests/test_gemini_model.py`, `tests/test_trace_turns.py`, and profile tests.
 
-Expected result:
+Expected result (met):
 
 - NAQSHA can run with a real model through a profile.
 - Provider-specific formats do not leak into `runtime.py`, QAOA Trace, tools, or

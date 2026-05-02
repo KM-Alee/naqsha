@@ -21,6 +21,38 @@ class ProfileValidationError(ValueError):
 
 
 @dataclass(frozen=True)
+class OpenAiCompatProfileSection:
+    """OpenAI-compatible Chat Completions endpoint settings (no secrets)."""
+
+    base_url: str = "https://api.openai.com/v1"
+    model: str = "gpt-4o-mini"
+    api_key_env: str = "OPENAI_API_KEY"
+    timeout_seconds: float = 120.0
+
+
+@dataclass(frozen=True)
+class AnthropicProfileSection:
+    """Anthropic Messages API settings (no secrets)."""
+
+    base_url: str = "https://api.anthropic.com"
+    model: str = "claude-sonnet-4-20250514"
+    api_key_env: str = "ANTHROPIC_API_KEY"
+    timeout_seconds: float = 120.0
+    max_tokens: int = 4096
+    anthropic_version: str = "2023-06-01"
+
+
+@dataclass(frozen=True)
+class GeminiProfileSection:
+    """Gemini ``generateContent`` settings (no secrets)."""
+
+    base_url: str = "https://generativelanguage.googleapis.com"
+    model: str = "gemini-2.0-flash"
+    api_key_env: str = "GEMINI_API_KEY"
+    timeout_seconds: float = 120.0
+
+
+@dataclass(frozen=True)
 class RunProfile:
     """Named runtime choices for model, tools, memory, traces, approvals, budgets."""
 
@@ -40,6 +72,9 @@ class RunProfile:
     budgets: BudgetLimits = field(default_factory=BudgetLimits)
     sanitizer_max_chars: int = 4000
     fake_model_messages: tuple[dict[str, Any], ...] | None = None
+    openai_compat: OpenAiCompatProfileSection | None = None
+    anthropic: AnthropicProfileSection | None = None
+    gemini: GeminiProfileSection | None = None
 
 
 DEFAULT_FAKE_SCRIPT: tuple[dict[str, Any], ...] = (
@@ -248,6 +283,107 @@ def _validate_fake_messages(raw: Any) -> tuple[dict[str, Any], ...] | None:
     return tuple(validated)
 
 
+def _parse_openai_compat_section(raw: Any) -> OpenAiCompatProfileSection:
+    if raw is None:
+        return OpenAiCompatProfileSection()
+    if not isinstance(raw, Mapping):
+        raise ProfileValidationError("'openai_compat' must be an object/table.")
+    extra = set(raw) - {"base_url", "model", "api_key_env", "timeout_seconds"}
+    if extra:
+        raise ProfileValidationError(f"Unknown openai_compat keys: {sorted(extra)}.")
+    defaults = OpenAiCompatProfileSection()
+    base_url = _as_str(raw.get("base_url", defaults.base_url), "openai_compat.base_url")
+    model = _as_str(raw.get("model", defaults.model), "openai_compat.model")
+    api_key_env = _as_str(
+        raw.get("api_key_env", defaults.api_key_env),
+        "openai_compat.api_key_env",
+    )
+    timeout_seconds = float(
+        _as_positive_float(
+            raw.get("timeout_seconds", defaults.timeout_seconds),
+            "openai_compat.timeout_seconds",
+        )
+    )
+    return OpenAiCompatProfileSection(
+        base_url=base_url,
+        model=model,
+        api_key_env=api_key_env,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def _parse_anthropic_section(raw: Any) -> AnthropicProfileSection:
+    if raw is None:
+        return AnthropicProfileSection()
+    if not isinstance(raw, Mapping):
+        raise ProfileValidationError("'anthropic' must be an object/table.")
+    extra = set(raw) - {
+        "base_url",
+        "model",
+        "api_key_env",
+        "timeout_seconds",
+        "max_tokens",
+        "anthropic_version",
+    }
+    if extra:
+        raise ProfileValidationError(f"Unknown anthropic keys: {sorted(extra)}.")
+    defaults = AnthropicProfileSection()
+    base_url = _as_str(raw.get("base_url", defaults.base_url), "anthropic.base_url")
+    model = _as_str(raw.get("model", defaults.model), "anthropic.model")
+    api_key_env = _as_str(
+        raw.get("api_key_env", defaults.api_key_env),
+        "anthropic.api_key_env",
+    )
+    timeout_seconds = float(
+        _as_positive_float(
+            raw.get("timeout_seconds", defaults.timeout_seconds),
+            "anthropic.timeout_seconds",
+        )
+    )
+    max_tokens = _as_int(raw.get("max_tokens", defaults.max_tokens), "anthropic.max_tokens")
+    anthropic_version = _as_str(
+        raw.get("anthropic_version", defaults.anthropic_version),
+        "anthropic.anthropic_version",
+    )
+    return AnthropicProfileSection(
+        base_url=base_url,
+        model=model,
+        api_key_env=api_key_env,
+        timeout_seconds=timeout_seconds,
+        max_tokens=max_tokens,
+        anthropic_version=anthropic_version,
+    )
+
+
+def _parse_gemini_section(raw: Any) -> GeminiProfileSection:
+    if raw is None:
+        return GeminiProfileSection()
+    if not isinstance(raw, Mapping):
+        raise ProfileValidationError("'gemini' must be an object/table.")
+    extra = set(raw) - {"base_url", "model", "api_key_env", "timeout_seconds"}
+    if extra:
+        raise ProfileValidationError(f"Unknown gemini keys: {sorted(extra)}.")
+    defaults = GeminiProfileSection()
+    base_url = _as_str(raw.get("base_url", defaults.base_url), "gemini.base_url")
+    model = _as_str(raw.get("model", defaults.model), "gemini.model")
+    api_key_env = _as_str(
+        raw.get("api_key_env", defaults.api_key_env),
+        "gemini.api_key_env",
+    )
+    timeout_seconds = float(
+        _as_positive_float(
+            raw.get("timeout_seconds", defaults.timeout_seconds),
+            "gemini.timeout_seconds",
+        )
+    )
+    return GeminiProfileSection(
+        base_url=base_url,
+        model=model,
+        api_key_env=api_key_env,
+        timeout_seconds=timeout_seconds,
+    )
+
+
 def parse_run_profile(data: Mapping[str, Any], *, base_dir: Path) -> RunProfile:
     """Build a RunProfile from a mapping; validate fields and coerce paths."""
 
@@ -261,17 +397,50 @@ def parse_run_profile(data: Mapping[str, Any], *, base_dir: Path) -> RunProfile:
         raise ProfileValidationError(f"Unknown profile keys: {sorted(extra)}.")
 
     name = _as_str(data.get("name", "unnamed"), "name")
-    model = _as_str(data.get("model", "fake"), "model")
+    model = (
+        _as_str(data.get("model", "fake"), "model").strip().lower().replace("-", "_")
+    )
+
+    openai_blob = data.get("openai_compat")
+    anthropic_blob = data.get("anthropic")
+    gemini_blob = data.get("gemini")
+
+    if openai_blob is not None and model != "openai_compat":
+        raise ProfileValidationError(
+            "'openai_compat' settings are only valid when model is 'openai_compat'."
+        )
+    if anthropic_blob is not None and model != "anthropic":
+        raise ProfileValidationError(
+            "'anthropic' settings are only valid when model is 'anthropic'."
+        )
+    if gemini_blob is not None and model != "gemini":
+        raise ProfileValidationError("'gemini' settings are only valid when model is 'gemini'.")
+
+    if model not in {"fake", "openai_compat", "anthropic", "gemini"}:
+        raise ProfileValidationError(
+            f"Unsupported model {model!r}. Supported values: 'fake', 'openai_compat', "
+            f"'anthropic', 'gemini'."
+        )
+
+    openai_section: OpenAiCompatProfileSection | None
+    anthropic_section: AnthropicProfileSection | None
+    gemini_section: GeminiProfileSection | None
     if model == "openai_compat":
-        raise ProfileValidationError(
-            "Model adapter 'openai_compat' is not available yet. "
-            "Use 'fake' for local runs until the provider adapter lands (Phase 6)."
-        )
-    if model != "fake":
-        raise ProfileValidationError(
-            f"Unsupported model {model!r}. Supported values: 'fake', 'openai_compat' "
-            "(openai_compat is deferred)."
-        )
+        openai_section = _parse_openai_compat_section(openai_blob)
+        anthropic_section = None
+        gemini_section = None
+    elif model == "anthropic":
+        openai_section = None
+        anthropic_section = _parse_anthropic_section(anthropic_blob)
+        gemini_section = None
+    elif model == "gemini":
+        openai_section = None
+        anthropic_section = None
+        gemini_section = _parse_gemini_section(gemini_blob)
+    else:
+        openai_section = None
+        anthropic_section = None
+        gemini_section = None
 
     trace_dir = _resolve_path(data.get("trace_dir", ".naqsha/traces"), "trace_dir", base_dir)
     tool_root = _resolve_path(data.get("tool_root", "."), "tool_root", base_dir)
@@ -327,6 +496,10 @@ def parse_run_profile(data: Mapping[str, Any], *, base_dir: Path) -> RunProfile:
     fake_messages: tuple[dict[str, Any], ...] | None = None
     fake_blob = data.get("fake_model")
     if fake_blob is not None:
+        if model != "fake":
+            raise ProfileValidationError(
+                "'fake_model' cannot be used with remote model adapters."
+            )
         if not isinstance(fake_blob, Mapping):
             raise ProfileValidationError("'fake_model' must be an object/table.")
         extra_fm = set(fake_blob) - {"messages"}
@@ -355,6 +528,9 @@ def parse_run_profile(data: Mapping[str, Any], *, base_dir: Path) -> RunProfile:
         budgets=budgets,
         sanitizer_max_chars=sanitizer_max_chars,
         fake_model_messages=fake_messages,
+        openai_compat=openai_section,
+        anthropic=anthropic_section,
+        gemini=gemini_section,
     )
 
 
@@ -391,4 +567,36 @@ def describe_profile_dict(profile: RunProfile) -> dict[str, Any]:
         },
         "sanitizer_max_chars": profile.sanitizer_max_chars,
         "fake_model_scripted_messages": profile.fake_model_messages is not None,
+        "openai_compat": (
+            {
+                "base_url": profile.openai_compat.base_url,
+                "model": profile.openai_compat.model,
+                "api_key_env": profile.openai_compat.api_key_env,
+                "timeout_seconds": profile.openai_compat.timeout_seconds,
+            }
+            if profile.openai_compat
+            else None
+        ),
+        "anthropic": (
+            {
+                "base_url": profile.anthropic.base_url,
+                "model": profile.anthropic.model,
+                "api_key_env": profile.anthropic.api_key_env,
+                "timeout_seconds": profile.anthropic.timeout_seconds,
+                "max_tokens": profile.anthropic.max_tokens,
+                "anthropic_version": profile.anthropic.anthropic_version,
+            }
+            if profile.anthropic
+            else None
+        ),
+        "gemini": (
+            {
+                "base_url": profile.gemini.base_url,
+                "model": profile.gemini.model,
+                "api_key_env": profile.gemini.api_key_env,
+                "timeout_seconds": profile.gemini.timeout_seconds,
+            }
+            if profile.gemini
+            else None
+        ),
     }

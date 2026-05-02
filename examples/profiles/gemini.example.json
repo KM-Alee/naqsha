@@ -1,0 +1,12 @@
+{
+  "name": "gemini-example",
+  "model": "gemini",
+  "trace_dir": ".naqsha/traces",
+  "tool_root": ".",
+  "gemini": {
+    "base_url": "https://generativelanguage.googleapis.com",
+    "model": "gemini-2.0-flash",
+    "api_key_env": "GEMINI_API_KEY",
+    "timeout_seconds": 120
+  }
+}

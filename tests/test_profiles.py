@@ -10,6 +10,39 @@ import pytest
 from naqsha.profiles import ProfileValidationError, load_run_profile, parse_run_profile
 
 
+def test_anthropic_profile_defaults(tmp_path: Path) -> None:
+    profile = parse_run_profile(
+        {"name": "a", "model": "anthropic", "trace_dir": ".", "tool_root": "."},
+        base_dir=tmp_path,
+    )
+    assert profile.anthropic is not None
+    assert profile.anthropic.api_key_env == "ANTHROPIC_API_KEY"
+    assert profile.anthropic.max_tokens == 4096
+
+
+def test_gemini_profile_defaults(tmp_path: Path) -> None:
+    profile = parse_run_profile(
+        {"name": "g", "model": "gemini", "trace_dir": ".", "tool_root": "."},
+        base_dir=tmp_path,
+    )
+    assert profile.gemini is not None
+    assert "generativelanguage" in profile.gemini.base_url
+
+
+def test_fake_model_with_anthropic_adapter_rejected(tmp_path: Path) -> None:
+    with pytest.raises(ProfileValidationError, match="fake_model"):
+        parse_run_profile(
+            {
+                "name": "x",
+                "model": "anthropic",
+                "trace_dir": ".",
+                "tool_root": ".",
+                "fake_model": {"messages": [{"kind": "answer", "text": "x"}]},
+            },
+            base_dir=tmp_path,
+        )
+
+
 def test_relative_paths_resolve_against_profile_file_directory(tmp_path: Path) -> None:
     sub = tmp_path / "proj"
     sub.mkdir()
@@ -32,14 +65,67 @@ def test_relative_paths_resolve_against_profile_file_directory(tmp_path: Path) -
     assert profile.tool_root == sub.resolve()
 
 
-def test_openai_compat_rejected_explicitly(tmp_path: Path) -> None:
+def test_openai_compat_profile_loads_with_defaults(tmp_path: Path) -> None:
     p = tmp_path / "o.json"
     p.write_text(
         json.dumps({"name": "x", "model": "openai_compat", "trace_dir": ".", "tool_root": "."}),
         encoding="utf-8",
     )
-    with pytest.raises(ProfileValidationError, match="openai_compat"):
-        load_run_profile(str(p))
+    profile = load_run_profile(str(p))
+    assert profile.model == "openai_compat"
+    assert profile.openai_compat is not None
+    assert profile.openai_compat.base_url == "https://api.openai.com/v1"
+    assert profile.openai_compat.api_key_env == "OPENAI_API_KEY"
+
+
+def test_openai_compat_hyphen_normalized(tmp_path: Path) -> None:
+    profile = parse_run_profile(
+        {"name": "h", "model": "openai-compat", "trace_dir": ".", "tool_root": "."},
+        base_dir=tmp_path,
+    )
+    assert profile.model == "openai_compat"
+
+
+def test_openai_compat_section_rejected_when_model_fake(tmp_path: Path) -> None:
+    with pytest.raises(ProfileValidationError, match="only valid when model"):
+        parse_run_profile(
+            {
+                "name": "x",
+                "model": "fake",
+                "trace_dir": ".",
+                "tool_root": ".",
+                "openai_compat": {"model": "gpt-4o-mini"},
+            },
+            base_dir=tmp_path,
+        )
+
+
+def test_fake_model_with_openai_adapter_rejected(tmp_path: Path) -> None:
+    with pytest.raises(ProfileValidationError, match="fake_model"):
+        parse_run_profile(
+            {
+                "name": "x",
+                "model": "openai_compat",
+                "trace_dir": ".",
+                "tool_root": ".",
+                "fake_model": {"messages": [{"kind": "answer", "text": "x"}]},
+            },
+            base_dir=tmp_path,
+        )
+
+
+def test_openai_compat_unknown_nested_key_rejected(tmp_path: Path) -> None:
+    with pytest.raises(ProfileValidationError, match="Unknown openai_compat"):
+        parse_run_profile(
+            {
+                "name": "x",
+                "model": "openai_compat",
+                "trace_dir": ".",
+                "tool_root": ".",
+                "openai_compat": {"nope": 1},
+            },
+            base_dir=tmp_path,
+        )
 
 
 def test_simplemem_cross_profile_loads_and_resolves_paths(tmp_path: Path) -> None:

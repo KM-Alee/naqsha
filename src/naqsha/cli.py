@@ -12,10 +12,9 @@ from typing import Any
 from naqsha.approvals import ApprovalGate, InteractiveApprovalGate, StaticApprovalGate
 from naqsha.memory.inmemory import InMemoryMemoryPort
 from naqsha.memory.simplemem_cross import SimpleMemCrossMemoryPort
-from naqsha.models.fake import FakeModelClient
+from naqsha.models.factory import model_client_from_profile
 from naqsha.policy import ToolPolicy
 from naqsha.profiles import (
-    DEFAULT_FAKE_SCRIPT,
     ProfileValidationError,
     RunProfile,
     describe_profile_dict,
@@ -50,9 +49,7 @@ def build_runtime(profile: RunProfile, *, approve_prompt: bool = False) -> CoreR
     tools = starter_tools(profile.tool_root)
     policy = _tool_policy(profile, tools)
 
-    scripted = profile.fake_model_messages
-    msgs = scripted if scripted is not None else DEFAULT_FAKE_SCRIPT
-    model = FakeModelClient(list(msgs))
+    model = model_client_from_profile(profile)
 
     memory = None
     if profile.memory_adapter == "inmemory":

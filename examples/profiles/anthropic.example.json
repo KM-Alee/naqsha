@@ -1,0 +1,14 @@
+{
+  "name": "anthropic-example",
+  "model": "anthropic",
+  "trace_dir": ".naqsha/traces",
+  "tool_root": ".",
+  "anthropic": {
+    "base_url": "https://api.anthropic.com",
+    "model": "claude-sonnet-4-20250514",
+    "api_key_env": "ANTHROPIC_API_KEY",
+    "timeout_seconds": 120,
+    "max_tokens": 4096,
+    "anthropic_version": "2023-06-01"
+  }
+}

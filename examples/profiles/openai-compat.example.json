@@ -1,0 +1,12 @@
+{
+  "name": "openai-compat-example",
+  "model": "openai_compat",
+  "trace_dir": ".naqsha/traces",
+  "tool_root": ".",
+  "openai_compat": {
+    "base_url": "https://api.openai.com/v1",
+    "model": "gpt-4o-mini",
+    "api_key_env": "OPENAI_API_KEY",
+    "timeout_seconds": 120
+  }
+}

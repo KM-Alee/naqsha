@@ -44,11 +44,19 @@ Future agents should keep these boundaries intact:
   (`memory/simplemem_cross.py`) lives here: SQLite + Cross-style lifecycle, no MCP. PyPI package
   `simplemem` is the unrelated embedding-heavy base library and does **not** include the
   repository-only `cross/` facade—do not conflate them when adding dependencies.
-- `models/` adapts provider output into validated NAP messages.
+- `models/` adapts provider output into validated NAP messages (stdlib HTTP only). Shared
+  modules: `models/trace_turns.py` (QAOA trace → neutral transcript for all providers),
+  `models/http_json.py` (JSON POST + structured HTTP errors + header redaction),
+  `models/errors.py` (`ModelInvocationError`). Remote clients: `openai_compat.py` (Chat
+  Completions), `anthropic.py` (Claude Messages API), `gemini.py` (`generateContent`).
+  `models/factory.py` provides `model_client_from_profile`. Run Profiles use `model` ∈
+  `fake`, `openai_compat`, `anthropic`, `gemini` with matching nested sections; credentials are
+  **environment variable names only**, never secret values in files.
 - `reflection/` may create isolated patches but never hotpatches active runtime behavior.
 - `profiles.py` owns **Run Profile** file parsing, validation, and `RunProfile` dataclass
   shaping; bundled defaults live in `bundled_profiles/`. **`cli.py` wires argparse and
-  maps a resolved profile to ports/adapters (`build_runtime`), not runtime semantics.**
+  maps a resolved profile to ports/adapters via `model_client_from_profile` inside
+  `build_runtime`, not runtime semantics.**
 
 ## First Extension Tasks
 
@@ -57,7 +65,6 @@ Good next tasks for a less-capable agent:
 - Add tests before adding behavior.
 - Pick exactly one phase from `docs/handoff/0001-v1-development-workflow.md` and finish it.
 - Improve memory retrieval backends (beyond keyword + recency) without coupling `CoreRuntime`.
-- Add an OpenAI-compatible `ModelClient` adapter in `src/naqsha/models/`.
 - Expand OWASP-mapped red-team fixtures under `tests/redteam/`.
 
 ## Phase Workflow
