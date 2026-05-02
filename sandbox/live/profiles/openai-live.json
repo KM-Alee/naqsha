@@ -1,0 +1,24 @@
+{
+  "name": "openai-live-sandbox",
+  "model": "openai_compat",
+  "trace_dir": "../.naqsha/traces",
+  "tool_root": "../workspace",
+  "allowed_tools": null,
+  "memory_adapter": "none",
+  "auto_approve": false,
+  "approval_required_tiers": ["write", "high"],
+  "sanitizer_max_chars": 8000,
+  "budgets": {
+    "max_steps": 16,
+    "max_tool_calls": 24,
+    "wall_clock_seconds": 180.0,
+    "per_tool_seconds": 45.0,
+    "max_model_tokens": null
+  },
+  "openai_compat": {
+    "base_url": "https://api.openai.com/v1",
+    "model": "gpt-5.4-nano",
+    "api_key_env": "OPENAI_API_KEY",
+    "timeout_seconds": 180
+  }
+}
