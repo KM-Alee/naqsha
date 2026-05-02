@@ -353,28 +353,44 @@ Do not:
 
 ## Phase 9: Packaging And Release Hardening
 
-Goal: make NAQSHA credible as the `naqsha` Python Package.
+Status: complete.
 
-Work to do:
+Goal: make NAQSHA credible as the `naqsha` Python package.
 
-- Verify package metadata, import name, typed exports, license metadata, README,
-  optional extras, console script, sdist, and wheel.
-- Add clean-environment installation tests.
-- Add release smoke tests that run the local fake-model Runtime Slice without
-  external API keys.
-- Add CI configuration if this workspace becomes a git repo.
-- Document PyPI release checklist and versioning expectations.
+Delivered:
 
-Expected result:
+- **License and metadata**: root `LICENSE` (MIT); `pyproject.toml` `[project.urls]` (homepage,
+  repository, issues); `[tool.hatch.build.targets.sdist]` includes `LICENSE`, `README.md`,
+  `pyproject.toml`, and `src/`.
+- **Dev tooling**: `build` added to the `dev` extra for local and CI `python -m build` parity.
+- **Install tests** (`tests/test_packaging_install.py`): one module-scoped wheel+sdist build;
+  wheel lists `naqsha/py.typed`; isolated venvs install the wheel and (with preinstalled
+  `hatchling`) the sdist via `--no-build-isolation`, then run `naqsha run --profile local-fake`
+  without API keys.
+- **CI** (`.github/workflows/ci.yml`): `uv sync --extra dev`, Ruff, full pytest on Python
+  3.11 and 3.12.
+- **Release docs**: `docs/release/pypi-checklist.md` (versioning, `twine check`, upload,
+  post-release smoke).
+- **README** aligned with shipped adapters, tools, and recommended `uv run --extra dev` commands.
+
+Expected result (met):
 
 - `naqsha` can be built, installed, imported, and run from a clean environment.
-- Release checks prove the local fake-model path works.
-- Optional extras remain optional.
+- Release checks include the local fake-model path (packaging tests + checklist).
+- Optional extras remain optional (`memory`, `web` placeholders).
 
 Do not:
 
 - Publish under `naqsh`.
 - Add hosted service, UI, MCP, or multi-agent orchestration to v1 release scope.
+
+### Risks the next phase inherits
+
+- Packaging tests add ~tens of seconds (wheel+sdist build once per test module).
+- **Phase 8 note still applies**: default `naqsha reflect` runs a nested full pytest over the
+  Reliability Gate paths; wheel-only installs without a checkout keep `ready_for_human_review`
+  false until `project_root` is a dev tree or tests inject `noop_gate_runner` (see
+  `docs/reflection-patch-review.md`).
 
 ## Phase 10: V1 Acceptance Review
 

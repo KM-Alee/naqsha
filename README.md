@@ -13,33 +13,39 @@ This repository is scaffolded around the v1 Runtime Slice described in
 the module boundaries are meant to let future agents add real adapters without changing
 the Core Runtime semantics.
 
-Implemented in the scaffold:
+Implemented in v1 scope:
 
 - strict NAP message dataclasses and validation helpers
 - QAOA trace event dataclasses and append-only JSONL trace store
-- Core Runtime loop with fake model support, tool policy, approvals, budgets, scheduler,
-  sanitizer, memory port hooks, and replay helpers
-- starter tools for calculator, clock, read file, write file, shell placeholder, web
-  placeholders, JSON patch placeholder, and human approval
+- Core Runtime loop with fake and remote model adapters, tool policy, approvals, budgets,
+  scheduler, sanitizer, Memory Port hooks, trace replay, and **Reflection Loop** artifacts
+- Starter Tool Set (calculator, clock, filesystem, shell, web fetch/search, JSON Patch,
+  human approval, and related policy metadata)
 - CLI with bundled `local-fake` Run Profile and JSON/TOML profile files
-- deterministic tests for the first Runtime Slice contracts
+- optional **SimpleMem-Cross** SQLite adapter and OpenAI-compatible, Anthropic, and Gemini
+  model clients (profile-driven; secrets via environment variable **names** only)
 
-Deliberately deferred:
+Deliberately out of v1 release scope:
 
-- live provider adapters
-- full SimpleMem-Cross integration
-- hosted services, MCP adapters, UI, heavy planners, and multi-agent orchestration
-- automatic Reflection Patch generation beyond the isolated interfaces
+- hosted services, bundled MCP, product UI, heavy planners, and multi-agent orchestration
 
 ## Quick Start
 
 ```bash
 uv sync --extra dev
-uv run pytest
+uv run --extra dev pytest
+uv run --extra dev ruff check .
 uv run naqsha run --profile local-fake "what time is it?"
 ```
 
-Without `uv`, use any Python 3.11+ environment:
+Install from PyPI (or a local wheel) without the dev extra:
+
+```bash
+python -m pip install naqsha
+naqsha run --profile local-fake "what time is it?"
+```
+
+With a checkout and editable dev install:
 
 ```bash
 python -m pip install -e ".[dev]"

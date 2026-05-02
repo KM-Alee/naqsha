@@ -114,6 +114,18 @@ Keep phase state in the handoff document. Keep this file focused on standing rul
 - Do not make budgets advisory; exhausted budgets fail closed.
 - Do not let Reflection Patches merge, hotpatch, or bypass human review.
 
+## Packaging and releases
+
+The public **PyPI distribution name**, **`import naqsha` package**, and **`naqsha` console script**
+must stay **`naqsha`** (not `naqsh`). Typed package marker: `src/naqsha/py.typed`.
+
+- Install-from-artifact regression tests live in `tests/test_packaging_install.py` (one shared
+  wheel+sdist build per module; sdist install uses preinstalled `hatchling` and
+  `--no-build-isolation` so CI does not need to download build backends).
+- Maintainer checklist: `docs/release/pypi-checklist.md`.
+- CI (when using GitHub Actions): `.github/workflows/ci.yml` syncs `dev` extras, runs Ruff, then
+  the full pytest suite on Python 3.11 and 3.12.
+
 ## Completion Bar
 
 A change is not done until it preserves:
