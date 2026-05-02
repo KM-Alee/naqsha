@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "naqsha"
+version = "0.1.0"
+description = "Inspectable Python agent runtime with strict tool contracts, QAOA traces, and durable memory ports."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "NAQSHA contributors" }]
+keywords = ["agents", "runtime", "react", "tools", "memory"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Typing :: Typed",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.8"]
+memory = []
+# Reserved for richer HTTP/search backends; starter web tools use the stdlib only.
+web = []
+
+[project.scripts]
+naqsha = "naqsha.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/naqsha"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

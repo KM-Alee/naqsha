@@ -1,0 +1,22 @@
+{
+  "name": "local-fake",
+  "model": "fake",
+  "trace_dir": ".naqsha/traces",
+  "tool_root": ".",
+  "allowed_tools": null,
+  "memory_adapter": "none",
+  "memory_token_budget": 512,
+  "auto_approve": false,
+  "approval_required_tiers": ["write", "high"],
+  "sanitizer_max_chars": 4000,
+  "budgets": {
+    "max_steps": 8,
+    "max_tool_calls": 16,
+    "wall_clock_seconds": 30.0,
+    "per_tool_seconds": 5.0,
+    "max_model_tokens": null
+  },
+  "fake_model": {
+    "messages": null
+  }
+}
