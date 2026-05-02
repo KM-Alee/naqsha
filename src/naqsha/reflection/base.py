@@ -15,9 +15,17 @@ from naqsha.protocols.qaoa import TraceEvent
 
 @dataclass(frozen=True)
 class ReflectionPatch:
+    """Artifacts for human review. There is no merge, apply, or hotpatch API."""
+
     workspace: Path
     summary: str
     reliability_gate_passed: bool
+
+    @property
+    def ready_for_human_review(self) -> bool:
+        """True when the Reliability Gate passed; merge still needs human approval."""
+
+        return self.reliability_gate_passed
 
 
 class ReflectionLoop(Protocol):

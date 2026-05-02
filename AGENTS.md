@@ -57,7 +57,14 @@ Future agents should keep these boundaries intact:
 - `replay.py` holds trace helpers (`nap_messages_from_trace`, `observations_by_call_id`,
   `compare_replay`, ...). CLI `naqsha replay --re-execute` re-runs with recorded observations.
   `tests/redteam/` holds OWASP-linked regression tests; map in `docs/redteam/owasp-llm-top10-mapping.md`.
-- `reflection/` may create isolated patches but never hotpatches active runtime behavior.
+- `reflection/` owns the **Reflection Loop** boundary: **`SimpleReflectionLoop`**
+  writes isolated **Reflection Patch** workspaces (never under the `naqsha` package
+  tree). **`run_reliability_gate_subprocess`** runs `pytest` on
+  `RELIABILITY_GATE_TEST_PATHS` before `ready_for_human_review` is true. There is no
+  merge, apply, or hotpatch API; review workflow: `docs/reflection-patch-review.md`.
+  **`naqsha reflect RUN_ID`** creates a patch from a QAOA trace (default workspace
+  base `.naqsha/reflection-workspaces`). Do not import **Core Runtime**, **Tool Policy**,
+  or **Approval Gate** from new reflection code.
 - `profiles.py` owns **Run Profile** file parsing, validation, and `RunProfile` dataclass
   shaping; bundled defaults live in `bundled_profiles/`. **`cli.py` wires argparse and
   maps a resolved profile to ports/adapters via `model_client_from_profile` inside

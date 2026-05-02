@@ -22,6 +22,7 @@ from naqsha.profiles import (
     load_run_profile,
 )
 from naqsha.protocols.qaoa import TraceEvent
+from naqsha.reflection.loop import SimpleReflectionLoop
 from naqsha.replay import (
     TraceReplayError,
     compare_replay,
@@ -265,6 +266,25 @@ def main(argv: list[str] | None = None) -> int:
     )
     _add_profile_arguments(inspect_parser)
 
+    reflect_parser = subcommands.add_parser(
+        "reflect",
+        help=(
+            "Build an isolated Reflection Patch from a QAOA trace: run the Reliability Gate "
+            "and write candidate artifacts for human review."
+        ),
+    )
+    _add_profile_arguments(reflect_parser)
+    reflect_parser.add_argument(
+        "--workspace-base",
+        type=Path,
+        default=None,
+        help=(
+            "Directory in which a unique patch workspace is created "
+            "(default: .naqsha/reflection-workspaces under the current working directory)."
+        ),
+    )
+    reflect_parser.add_argument("run_id")
+
     args = parser.parse_args(argv)
 
     try:
@@ -273,6 +293,38 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "inspect-policy":
             print(json.dumps(inspect_policy_payload(profile), indent=2, sort_keys=True))
+            return 0
+
+        if args.command == "reflect":
+            trace_store = JsonlTraceStore(profile.trace_dir)
+            events = trace_store.load(args.run_id)
+            if not events:
+                print(
+                    f"{parser.prog}: no trace file for run id {args.run_id!r} "
+                    f"under {profile.trace_dir}.",
+                    file=sys.stderr,
+                )
+                return 2
+            base = args.workspace_base
+            if base is None:
+                base = Path.cwd() / ".naqsha" / "reflection-workspaces"
+            loop = SimpleReflectionLoop(workspace_parent=base.expanduser().resolve())
+            patch = loop.propose_patch(events)
+            if patch is None:
+                print(f"{parser.prog}: reflection failed (empty trace).", file=sys.stderr)
+                return 2
+            print(
+                json.dumps(
+                    {
+                        "workspace": str(patch.workspace),
+                        "summary": patch.summary,
+                        "reliability_gate_passed": patch.reliability_gate_passed,
+                        "ready_for_human_review": patch.ready_for_human_review,
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
             return 0
 
         if args.command == "replay":

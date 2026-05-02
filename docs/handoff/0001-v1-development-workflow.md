@@ -314,25 +314,37 @@ Do not:
 
 ## Phase 8: Reflection Loop Boundary
 
+Status: complete.
+
 Goal: implement active reflection without giving it authority to mutate the
 active runtime.
 
-Work to do:
+Delivered:
 
-- Implement candidate reflection generation from evaluated runs.
-- Create isolated Reflection Patch workspaces.
-- Require the Reliability Gate to pass before a Reflection Patch is marked ready
-  for human review.
-- Add tests proving reflection cannot hotpatch active code, modify Tool Policy,
-  bypass approvals, or merge automatically.
-- Document the review workflow for Reflection Patches.
+- **Reliability Gate** (`reflection/reliability_gate.py`): subprocess `pytest` over a fixed
+  file list (replay, protocols, policy+trace, SimpleMem-Cross, red-team corpus);
+  `resolve_project_root_for_gate()` discovers a checkout; missing `tests/` fails closed.
+- **Isolated workspaces** (`reflection/workspace.py`): `create_isolated_workspace` rejects
+  paths under the installed `naqsha` package directory.
+- **Candidate artifacts** (`reflection/candidate.py`): deterministic `CANDIDATE.md` and
+  `meta.json` from trace facts (plus `READY_FOR_REVIEW.txt` / `GATE_FAILED.txt`).
+- **`SimpleReflectionLoop`** (`reflection/loop.py`): injectable `gate_runner`; library
+  test hooks `noop_gate_runner` / `failing_gate_runner`; no imports of Core Runtime,
+  Tool Policy, or Approval Gate.
+- **`ReflectionPatch`** (`reflection/base.py`): `ready_for_human_review` mirrors gate pass;
+  no merge/apply API.
+- **CLI**: `naqsha reflect RUN_ID` with `--workspace-base` (default
+  `.naqsha/reflection-workspaces` under cwd).
+- **Documentation**: `docs/reflection-patch-review.md` (human review workflow).
+- **Tests**: `tests/test_reflection_loop.py` (workspace isolation, gate pass/fail,
+  forbidden imports in `reflection/*.py`, CLI smoke with fast gate).
 
-Expected result:
+Expected result (met):
 
-- Reflection can propose improvements.
+- Reflection can propose improvements as on-disk artifacts.
 - Human review remains mandatory before changes affect the active runtime.
 - Prompt injection, memory poisoning, and overfit replay tests cannot silently
-  expand runtime agency.
+  expand runtime agency via this module (no policy/runtime binding; no auto-merge).
 
 Do not:
 
