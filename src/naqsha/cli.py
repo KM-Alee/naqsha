@@ -13,6 +13,7 @@ from naqsha.approvals import ApprovalGate, InteractiveApprovalGate, StaticApprov
 from naqsha.memory.inmemory import InMemoryMemoryPort
 from naqsha.memory.simplemem_cross import SimpleMemCrossMemoryPort
 from naqsha.models.factory import model_client_from_profile
+from naqsha.models.trace_replay import TraceReplayExhausted, TraceReplayModelClient
 from naqsha.policy import ToolPolicy
 from naqsha.profiles import (
     ProfileValidationError,
@@ -20,9 +21,18 @@ from naqsha.profiles import (
     describe_profile_dict,
     load_run_profile,
 )
-from naqsha.replay import summarize_trace
+from naqsha.protocols.qaoa import TraceEvent
+from naqsha.replay import (
+    TraceReplayError,
+    compare_replay,
+    first_query_from_trace,
+    nap_messages_from_trace,
+    observations_by_call_id,
+    summarize_trace,
+)
 from naqsha.runtime import CoreRuntime, RuntimeConfig
 from naqsha.sanitizer import ObservationSanitizer
+from naqsha.scheduler import ReplayObservationMissing, ToolScheduler
 from naqsha.tools.base import RiskTier, Tool
 from naqsha.tools.starter import starter_tools
 from naqsha.trace.jsonl import JsonlTraceStore
@@ -76,6 +86,52 @@ def build_runtime(profile: RunProfile, *, approve_prompt: bool = False) -> CoreR
             budgets=profile.budgets,
             approval_gate=gate,
             sanitizer=ObservationSanitizer(max_chars=profile.sanitizer_max_chars),
+            memory=memory,
+            memory_token_budget=profile.memory_token_budget,
+        )
+    )
+
+
+def build_trace_replay_runtime(
+    profile: RunProfile,
+    reference_events: list[TraceEvent],
+    *,
+    approve_prompt: bool = False,
+) -> CoreRuntime:
+    """Same wiring as ``build_runtime`` with trace-scripted model and recorded tools."""
+
+    tools = starter_tools(profile.tool_root)
+    policy = _tool_policy(profile, tools)
+
+    memory = None
+    if profile.memory_adapter == "inmemory":
+        memory = InMemoryMemoryPort()
+    elif profile.memory_adapter == "simplemem_cross":
+        memory = SimpleMemCrossMemoryPort(
+            project=profile.memory_cross_project,
+            database_path=profile.memory_cross_database,
+        )
+
+    if profile.auto_approve:
+        gate: ApprovalGate = StaticApprovalGate(approved=True)
+    elif approve_prompt:
+        gate = InteractiveApprovalGate()
+    else:
+        gate = StaticApprovalGate(approved=False)
+
+    messages = nap_messages_from_trace(reference_events)
+    recorded = observations_by_call_id(reference_events)
+
+    return CoreRuntime(
+        RuntimeConfig(
+            model=TraceReplayModelClient(messages),
+            tools=tools,
+            trace_store=JsonlTraceStore(profile.trace_dir),
+            policy=policy,
+            budgets=profile.budgets,
+            approval_gate=gate,
+            sanitizer=ObservationSanitizer(max_chars=profile.sanitizer_max_chars),
+            scheduler=ToolScheduler(recorded_observations=recorded),
             memory=memory,
             memory_token_budget=profile.memory_token_budget,
         )
@@ -175,8 +231,32 @@ def main(argv: list[str] | None = None) -> int:
     )
     run_parser.add_argument("query")
 
-    replay_parser = subcommands.add_parser("replay", help="Summarize a QAOA Trace by run id.")
+    replay_parser = subcommands.add_parser(
+        "replay",
+        help="Inspect a QAOA Trace, or re-execute it using stored observations (no live tools).",
+    )
     _add_profile_arguments(replay_parser)
+    replay_parser.add_argument(
+        "--re-execute",
+        action="store_true",
+        help=(
+            "Run the Core Runtime again with the same scripted model turns and tool observations "
+            "from this trace (approved calls do not invoke real tools)."
+        ),
+    )
+    replay_parser.add_argument(
+        "--approve-prompt",
+        action="store_true",
+        help=(
+            "When used with --re-execute, prompt on stdin for each approval-gated tool call. "
+            "Ignored when auto_approve is true."
+        ),
+    )
+    replay_parser.add_argument(
+        "--human",
+        action="store_true",
+        help="Print a short text summary instead of JSON (summary mode only).",
+    )
     replay_parser.add_argument("run_id")
 
     inspect_parser = subcommands.add_parser(
@@ -196,7 +276,69 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "replay":
-            summary = summarize_trace(JsonlTraceStore(profile.trace_dir), args.run_id)
+            trace_store = JsonlTraceStore(profile.trace_dir)
+            if args.re_execute:
+                reference = trace_store.load(args.run_id)
+                if not reference:
+                    print(
+                        f"{parser.prog}: no trace file for run id {args.run_id!r} "
+                        f"under {profile.trace_dir}.",
+                        file=sys.stderr,
+                    )
+                    return 2
+                try:
+                    query = first_query_from_trace(reference)
+                    runtime = build_trace_replay_runtime(
+                        profile,
+                        reference,
+                        approve_prompt=args.approve_prompt,
+                    )
+                    result = runtime.run(query)
+                except (TraceReplayError, TraceReplayExhausted, ReplayObservationMissing) as exc:
+                    print(f"{parser.prog}: replay error: {exc}", file=sys.stderr)
+                    return 2
+                replay_events = trace_store.load(result.run_id)
+                diff = compare_replay(reference, replay_events)
+                print(
+                    json.dumps(
+                        {
+                            "failed": result.failed,
+                            "failure_code": result.failure_code,
+                            "reference_run_id": args.run_id,
+                            "replay_run_id": result.run_id,
+                            "replay_answer": result.answer,
+                            "answer_matches_reference": diff.answer_matches,
+                            "tool_calls_match_reference": diff.tool_calls_match,
+                            "reference_tool_calls": diff.reference_tool_calls,
+                            "replay_tool_calls": diff.replay_tool_calls,
+                            "reference_answer": diff.reference_answer,
+                        },
+                        indent=2,
+                        sort_keys=True,
+                    )
+                )
+                return (
+                    1
+                    if result.failed
+                    or not diff.answer_matches
+                    or not diff.tool_calls_match
+                    else 0
+                )
+
+            summary = summarize_trace(trace_store, args.run_id)
+            if args.human:
+                fail_n = len(summary.failures)
+                print(f"run_id: {summary.run_id}")
+                print(f"queries: {', '.join(summary.queries) or '(none)'}")
+                print(f"observations: {len(summary.observations)}")
+                if summary.answer is not None:
+                    print(f"answer: {summary.answer}")
+                else:
+                    print("answer: (none)")
+                print(f"failures: {fail_n}")
+                for f in summary.failures:
+                    print(f"  - {f.get('code', '?')}: {f.get('message', '')}")
+                return 0
             print(json.dumps(summary.__dict__, default=str, sort_keys=True))
             return 0
 

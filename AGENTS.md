@@ -36,7 +36,8 @@ Future agents should keep these boundaries intact:
 - `scheduler.py` decides serial versus parallel execution after policy approval;
   records scheduling metadata on trace `action` events (`scheduler.mode`,
   `scheduler.parallel_eligible`). Enforces per-tool timeouts when a `BudgetMeter`
-  is supplied.
+  is supplied. Optional `ToolScheduler(recorded_observations=...)` replays persisted
+  **Untrusted Observation** payloads by **call id** (no live tool I/O) for approved calls.
 - `tools/` defines executable capabilities and risk metadata. The **Starter Tool Set**
   lives in `tools/starter.py` with stdlib HTTP in `tools/http_utils.py` and JSON Patch
   helpers in `tools/json_patch.py`.
@@ -47,11 +48,15 @@ Future agents should keep these boundaries intact:
 - `models/` adapts provider output into validated NAP messages (stdlib HTTP only). Shared
   modules: `models/trace_turns.py` (QAOA trace → neutral transcript for all providers),
   `models/http_json.py` (JSON POST + structured HTTP errors + header redaction),
-  `models/errors.py` (`ModelInvocationError`). Remote clients: `openai_compat.py` (Chat
-  Completions), `anthropic.py` (Claude Messages API), `gemini.py` (`generateContent`).
-  `models/factory.py` provides `model_client_from_profile`. Run Profiles use `model` ∈
-  `fake`, `openai_compat`, `anthropic`, `gemini` with matching nested sections; credentials are
-  **environment variable names only**, never secret values in files.
+  `models/errors.py` (`ModelInvocationError`). `models/trace_replay.py` is the
+  `TraceReplayModelClient` (replay NAP sequence from a reference trace). Remote clients:
+  `openai_compat.py` (Chat Completions), `anthropic.py` (Claude Messages API),
+  `gemini.py` (`generateContent`). `models/factory.py` provides `model_client_from_profile`.
+  Run Profiles use `model` ∈ `fake`, `openai_compat`, `anthropic`, `gemini` with matching nested
+  sections; credentials are **environment variable names only**, never secret values in files.
+- `replay.py` holds trace helpers (`nap_messages_from_trace`, `observations_by_call_id`,
+  `compare_replay`, ...). CLI `naqsha replay --re-execute` re-runs with recorded observations.
+  `tests/redteam/` holds OWASP-linked regression tests; map in `docs/redteam/owasp-llm-top10-mapping.md`.
 - `reflection/` may create isolated patches but never hotpatches active runtime behavior.
 - `profiles.py` owns **Run Profile** file parsing, validation, and `RunProfile` dataclass
   shaping; bundled defaults live in `bundled_profiles/`. **`cli.py` wires argparse and

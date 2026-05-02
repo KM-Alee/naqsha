@@ -39,6 +39,24 @@ def test_cli_run_and_replay_with_bundled_profile(tmp_path: Path, monkeypatch) ->
     assert summary["queries"] == ["ping"]
 
 
+def test_cli_replay_re_execute_matches_live_run(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    buf = StringIO()
+    with redirect_stdout(buf):
+        assert cli.main(["run", "--profile", "local-fake", "ping"]) == 0
+    run_id = json.loads(buf.getvalue())["run_id"]
+
+    out2 = StringIO()
+    with redirect_stdout(out2):
+        code = cli.main(["replay", "--profile", "local-fake", "--re-execute", run_id])
+    assert code == 0
+    payload = json.loads(out2.getvalue())
+    assert payload["reference_run_id"] == run_id
+    assert payload["answer_matches_reference"] is True
+    assert payload["tool_calls_match_reference"] is True
+    assert payload["replay_run_id"] != run_id
+
+
 def test_cli_profile_not_found_stderr(tmp_path: Path, monkeypatch, capsys) -> None:
     monkeypatch.chdir(tmp_path)
     assert cli.main(["run", "--profile", "no-such-bundle-name-zzz", "query"]) == 2

@@ -278,25 +278,34 @@ Do not:
 
 ## Phase 7: Replay, Evaluation, And Red-Team Gate
 
+Status: complete.
+
 Goal: turn the Reliability Gate into a concrete test suite rather than a promise.
 
-Work to do:
+Delivered:
 
-- Implement deterministic replay that can use recorded observations without
-  calling live tools again.
-- Add replay tests for tool selection and final-answer comparison.
-- Add OWASP-mapped red-team fixtures for indirect prompt injection, unsafe tool
-  escalation, sensitive output, malicious memory content, oversized outputs, and
-  loop-inducing model behavior.
-- Add sanitizer tests for secret-like strings, prompt injection strings, large
-  outputs, binary-like content, structured tool errors, and safe ordinary output.
-- Add documentation mapping the red-team corpus to OWASP LLM Top 10 categories.
+- **Trace replay execution**: `TraceReplayModelClient` replays the NAP Action/Answer sequence
+  from a reference QAOA trace; `ToolScheduler(recorded_observations=...)` returns persisted
+  observations by **call id** (no live tool execution for approved calls). Helpers in
+  `replay.py` (`nap_messages_from_trace`, `observations_by_call_id`, `compare_replay`,
+  `tool_calls_chronology`). `ToolObservation.from_trace_payload` rebuilds observations from JSON.
+- **CLI**: `naqsha replay RUN_ID` (JSON summary, or `--human` text); `naqsha replay RUN_ID
+  --re-execute` runs a second pass and prints comparison fields; exit `1` when the new run fails
+  or diverges on answer or tool-call path from the reference trace; `--approve-prompt` supported
+  for replay parity.
+- **Evaluation tests**: `tests/test_trace_replay.py` (round-trip, diff, scheduler missing obs);
+  `tests/test_cli.py` (`--re-execute` smoke).
+- **Red-team corpus**: `tests/redteam/test_corpus.py` (memory poisoning wrapper, unknown-tool
+  denial, loop/budget); mapping doc `docs/redteam/owasp-llm-top10-mapping.md` (informative, not a
+  compliance claim).
+- **Sanitizer tests**: `tests/test_sanitizer.py` (secrets, truncation, injection-string baseline,
+  structured errors, binary-like text).
 
-Expected result:
+Expected result (met):
 
-- Replay catches behavior regressions.
+- Replay catches behavior regressions (answer + tool path).
 - Safety claims are backed by executable tests.
-- Sanitizer and policy boundaries are visible in traces.
+- Sanitizer and policy boundaries remain visible in traces and tests.
 
 Do not:
 

@@ -32,6 +32,23 @@ class ToolObservation:
     def to_dict(self) -> dict[str, Any]:
         return {"ok": self.ok, "content": self.content, "metadata": self.metadata or {}}
 
+    @classmethod
+    def from_trace_payload(cls, payload: dict[str, Any]) -> ToolObservation:
+        """Rebuild a persisted QAOA observation dict into a ToolObservation."""
+
+        if not isinstance(payload, dict):
+            raise ValueError("Observation payload must be an object.")
+        ok = payload.get("ok")
+        if not isinstance(ok, bool):
+            raise ValueError("Observation 'ok' must be a boolean.")
+        content = payload.get("content")
+        if not isinstance(content, str):
+            raise ValueError("Observation 'content' must be a string.")
+        meta = payload.get("metadata")
+        if meta is not None and not isinstance(meta, dict):
+            raise ValueError("Observation 'metadata' must be an object when present.")
+        return cls(ok=ok, content=content, metadata=meta)
+
 
 class Tool(Protocol):
     spec: ToolSpec

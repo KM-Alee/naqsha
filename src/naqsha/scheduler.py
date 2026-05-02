@@ -11,6 +11,10 @@ from naqsha.protocols.nap import ToolCall
 from naqsha.tools.base import Tool, ToolObservation
 
 
+class ReplayObservationMissing(LookupError):
+    """Raised when trace replay expected a recorded observation but none was stored."""
+
+
 @dataclass(frozen=True)
 class ScheduledObservation:
     call: ToolCall
@@ -19,6 +23,11 @@ class ScheduledObservation:
 
 class ToolScheduler:
     """Execute approved calls serially unless all are safe read-only calls."""
+
+    def __init__(self, recorded_observations: dict[str, ToolObservation] | None = None) -> None:
+        """If set, approved tool calls return these observations by call id (no live tool I/O)."""
+
+        self.recorded_observations = recorded_observations
 
     def can_parallelize(self, calls: tuple[ToolCall, ...], tools: dict[str, Tool]) -> bool:
         if len(calls) <= 1:
@@ -41,6 +50,14 @@ class ToolScheduler:
         per_tool_timeout = meter.limits.per_tool_seconds if meter is not None else None
 
         def invoke(call: ToolCall) -> ToolObservation:
+            if self.recorded_observations is not None:
+                recorded = self.recorded_observations.get(call.id)
+                if recorded is None:
+                    raise ReplayObservationMissing(
+                        f"No recorded observation for approved call id {call.id!r} "
+                        f"(tool {call.name!r}). Is the trace complete?"
+                    )
+                return recorded
             try:
                 return tools[call.name].execute(call.arguments)
             except Exception as exc:  # noqa: BLE001 - tool failures become observations.
