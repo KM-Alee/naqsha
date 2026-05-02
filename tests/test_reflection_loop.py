@@ -64,6 +64,7 @@ def test_propose_patch_noop_gate_writes_artifacts(tmp_path: Path) -> None:
     assert (ws / "CANDIDATE.md").is_file()
     assert (ws / "meta.json").is_file()
     assert (ws / "READY_FOR_REVIEW.txt").is_file()
+    assert (ws / "IMPROVEMENT_NOTES.md").is_file()
     body = (ws / "CANDIDATE.md").read_text(encoding="utf-8")
     assert run_id in body
     assert "done" in body

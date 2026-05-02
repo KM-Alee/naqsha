@@ -20,6 +20,10 @@ _Avoid_: core feature, platform requirement
 The first supported ways to use NAQSHA: Python library and CLI.
 _Avoid_: hosted platform, UI product, MCP adapter
 
+**Agent Workbench**:
+The CLI and library workflows that wrap the Core Runtime: initialize an agent project, run queries, inspect **QAOA Traces**, replay and evaluate runs, and generate **Reflection Patches** for reviewed self-improvement.
+_Avoid_: conflating workbench UX with Core Runtime execution rules
+
 **Python Package**:
 The distributable NAQSHA library and CLI artifact intended for PyPI release under the `naqsha` distribution name.
 _Avoid_: local script, unpublished prototype

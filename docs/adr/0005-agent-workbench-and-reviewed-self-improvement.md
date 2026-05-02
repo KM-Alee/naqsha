@@ -1,0 +1,3 @@
+# Agent Workbench and Reviewed Self-Improvement
+
+NAQSHA exposes an **Agent Workbench** as the primary product surface: CLI and library workflows to initialize an agent project, run queries, inspect **QAOA Traces**, replay and evaluate runs, persist **Memory Port** state, and generate **Reflection Patches** for **reviewed self-improvement**. Self-improvement may propose changes to profiles, tool documentation, memory guidance, tests, and reflection artifacts, but must not hotpatch the active **Core Runtime** or merge without human approval. The trade-off is a larger interface set than a thin demo CLI, in exchange for a clear job-to-be-done: build agents that improve safely from their own traces.

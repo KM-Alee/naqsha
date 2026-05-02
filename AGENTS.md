@@ -54,6 +54,9 @@ Future agents should keep these boundaries intact:
   `gemini.py` (`generateContent`). `models/factory.py` provides `model_client_from_profile`.
   Run Profiles use `model` ∈ `fake`, `openai_compat`, `anthropic`, `gemini` with matching nested
   sections; credentials are **environment variable names only**, never secret values in files.
+- `profiles.py` owns **Run Profile** parsing, validation, naming resolution (bundled names,
+  `.naqsha/profiles/`, `profiles/`, `examples/profiles/` paths per `load_raw_profile`), and bundled
+  JSON/TOML under `bundled_profiles/`.
 - `replay.py` holds trace helpers (`nap_messages_from_trace`, `observations_by_call_id`,
   `compare_replay`, ...). CLI `naqsha replay --re-execute` re-runs with recorded observations.
   `tests/redteam/` holds OWASP-linked regression tests; map in `docs/redteam/owasp-llm-top10-mapping.md`.
@@ -65,10 +68,15 @@ Future agents should keep these boundaries intact:
   **`naqsha reflect RUN_ID`** creates a patch from a QAOA trace (default workspace
   base `.naqsha/reflection-workspaces`). Do not import **Core Runtime**, **Tool Policy**,
   or **Approval Gate** from new reflection code.
-- `profiles.py` owns **Run Profile** file parsing, validation, and `RunProfile` dataclass
-  shaping; bundled defaults live in `bundled_profiles/`. **`cli.py` wires argparse and
-  maps a resolved profile to ports/adapters via `model_client_from_profile` inside
-  `build_runtime`, not runtime semantics.**
+- `wiring.py` owns **Run Profile → `CoreRuntime` wiring**: `build_runtime`,
+  `build_trace_replay_runtime`, `inspect_policy_payload`. **`cli.py`** only parses arguments and
+  dispatches to `wiring` and **`AgentWorkbench`**; it must not invent runtime semantics. Library
+  embedders import from `naqsha.wiring` (or **`naqsha`** root re-exports), not from `cli` for
+  construction.
+- `eval_fixtures.py` owns schema-versioned regression fixture save/load helpers used by **`naqsha eval`** and **`AgentWorkbench.check_eval_fixture`**.
+- `project.py` owns `.naqsha/` filesystem layout helpers (`naqsha init`).
+- `trace_scan.py` lists traces by file mtime (e.g. `replay --latest`).
+- `workbench/` owns **`AgentWorkbench`**: façade over profiles, replay, eval, reflection entry points **without importing `cli`**.
 
 ## First Extension Tasks
 

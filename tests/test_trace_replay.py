@@ -3,7 +3,6 @@
 import pytest
 
 from naqsha.approvals import StaticApprovalGate
-from naqsha.cli import build_trace_replay_runtime
 from naqsha.models.fake import FakeModelClient
 from naqsha.policy import ToolPolicy
 from naqsha.profiles import RunProfile
@@ -23,6 +22,7 @@ from naqsha.scheduler import ReplayObservationMissing, ToolScheduler
 from naqsha.tools.base import ToolObservation
 from naqsha.tools.starter import starter_tools
 from naqsha.trace.jsonl import JsonlTraceStore
+from naqsha.wiring import build_trace_replay_runtime
 
 
 def test_nap_messages_from_trace_round_trip(tmp_path) -> None:

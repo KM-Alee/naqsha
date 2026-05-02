@@ -81,9 +81,23 @@ def test_wheel_install_import_and_cli_smoke(
     venv = _fresh_venv(tmp_path / "wheel-venv")
     _run([str(_py(venv)), "-m", "pip", "install", "--quiet", str(wheel)], capture_output=True)
     _run(
-        [str(_py(venv)), "-c", "from naqsha import CoreRuntime, RunResult, RuntimeConfig"],
+        [
+            str(_py(venv)),
+            "-c",
+            "from naqsha import AgentWorkbench, build_runtime\n"
+            "from naqsha.runtime import CoreRuntime, RunResult, RuntimeConfig",
+        ],
         capture_output=True,
     )
+    ver = subprocess.run(
+        [str(_py(venv)), "-m", "naqsha", "--version"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert ver.returncode == 0, ver.stderr
+
     proc = subprocess.run(
         [str(_naqsha(venv)), "run", "--profile", "local-fake", "ping"],
         cwd=tmp_path,
@@ -112,6 +126,22 @@ def test_sdist_install_import_and_cli_smoke(
         [py, "-m", "pip", "install", "--quiet", "--no-build-isolation", str(sdist)],
         capture_output=True,
     )
+    _run(
+        [
+            py,
+            "-c",
+            "from naqsha import AgentWorkbench, CoreRuntime, build_runtime",
+        ],
+        capture_output=True,
+    )
+    ver = subprocess.run(
+        [py, "-m", "naqsha", "--version"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert ver.returncode == 0, ver.stderr
     proc = subprocess.run(
         [str(_naqsha(venv)), "run", "--profile", "local-fake", "ping"],
         cwd=tmp_path,
@@ -122,3 +152,4 @@ def test_sdist_install_import_and_cli_smoke(
     assert proc.returncode == 0, proc.stderr
     payload = json.loads(proc.stdout.strip())
     assert payload.get("failed") is False
+    assert "run_id" in payload

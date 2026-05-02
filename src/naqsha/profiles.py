@@ -137,6 +137,8 @@ def load_raw_profile(spec: str) -> tuple[dict[str, Any], Path]:
     for candidate in (
         cwd / "profiles" / f"{trimmed}.json",
         cwd / "profiles" / f"{trimmed}.toml",
+        cwd / ".naqsha" / "profiles" / f"{trimmed}.json",
+        cwd / ".naqsha" / "profiles" / f"{trimmed}.toml",
         cwd / "examples" / "profiles" / f"{trimmed}.json",
         cwd / "examples" / "profiles" / f"{trimmed}.toml",
         cwd / "docs" / "examples" / "profiles" / f"{trimmed}.json",
@@ -152,7 +154,7 @@ def load_raw_profile(spec: str) -> tuple[dict[str, Any], Path]:
 
     raise ProfileValidationError(
         f"Profile {trimmed!r} not found. Pass a path to a .json/.toml file, a name matching "
-        f"a bundled profile, or files under profiles/, examples/profiles/, or "
+        f"a bundled profile, or files under profiles/, .naqsha/profiles/, examples/profiles/, or "
         f"docs/examples/profiles/ in the working directory."
     )
 

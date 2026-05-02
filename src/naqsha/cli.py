@@ -1,4 +1,4 @@
-"""NAQSHA CLI."""
+"""NAQSHA CLI and Agent Workbench."""
 
 from __future__ import annotations
 
@@ -9,171 +9,36 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from naqsha.approvals import ApprovalGate, InteractiveApprovalGate, StaticApprovalGate
-from naqsha.memory.inmemory import InMemoryMemoryPort
-from naqsha.memory.simplemem_cross import SimpleMemCrossMemoryPort
-from naqsha.models.factory import model_client_from_profile
-from naqsha.models.trace_replay import TraceReplayExhausted, TraceReplayModelClient
-from naqsha.policy import ToolPolicy
-from naqsha.profiles import (
-    ProfileValidationError,
-    RunProfile,
-    describe_profile_dict,
-    load_run_profile,
-)
-from naqsha.protocols.qaoa import TraceEvent
+from naqsha.eval_fixtures import build_fixture_from_trace as build_eval_fixture
+from naqsha.eval_fixtures import save_fixture
+from naqsha.models.trace_replay import TraceReplayExhausted
+from naqsha.profiles import ProfileValidationError, load_run_profile
+from naqsha.project import evals_dir, init_agent_project
 from naqsha.reflection.loop import SimpleReflectionLoop
 from naqsha.replay import (
     TraceReplayError,
     compare_replay,
     first_query_from_trace,
-    nap_messages_from_trace,
-    observations_by_call_id,
     summarize_trace,
 )
-from naqsha.runtime import CoreRuntime, RuntimeConfig
-from naqsha.sanitizer import ObservationSanitizer
-from naqsha.scheduler import ReplayObservationMissing, ToolScheduler
-from naqsha.tools.base import RiskTier, Tool
-from naqsha.tools.starter import starter_tools
+from naqsha.scheduler import ReplayObservationMissing
 from naqsha.trace.jsonl import JsonlTraceStore
+from naqsha.trace_scan import latest_run_id
+from naqsha.wiring import (
+    build_runtime,
+    build_trace_replay_runtime,
+    inspect_policy_payload,
+)
+from naqsha.workbench import AgentWorkbench
 
 
-def _tool_policy(profile: RunProfile, tools: dict[str, Tool]) -> ToolPolicy:
-    if profile.allowed_tool_names is None:
-        allowed = frozenset(tools)
-    else:
-        allowed = profile.allowed_tool_names
-        missing = allowed - frozenset(tools)
-        if missing:
-            raise ProfileValidationError(
-                f"allowed_tools contains names not loaded from Starter Tool Set: "
-                f"{sorted(missing)}."
-            )
-    return ToolPolicy(
-        allowed_tools=allowed,
-        approval_required_tiers=profile.approval_required_tiers,
-    )
+def _version_string() -> str:
+    try:
+        from importlib.metadata import version
 
-
-def build_runtime(profile: RunProfile, *, approve_prompt: bool = False) -> CoreRuntime:
-    tools = starter_tools(profile.tool_root)
-    policy = _tool_policy(profile, tools)
-
-    model = model_client_from_profile(profile)
-
-    memory = None
-    if profile.memory_adapter == "inmemory":
-        memory = InMemoryMemoryPort()
-    elif profile.memory_adapter == "simplemem_cross":
-        memory = SimpleMemCrossMemoryPort(
-            project=profile.memory_cross_project,
-            database_path=profile.memory_cross_database,
-        )
-
-    if profile.auto_approve:
-        gate: ApprovalGate = StaticApprovalGate(approved=True)
-    elif approve_prompt:
-        gate = InteractiveApprovalGate()
-    else:
-        gate = StaticApprovalGate(approved=False)
-
-    return CoreRuntime(
-        RuntimeConfig(
-            model=model,
-            tools=tools,
-            trace_store=JsonlTraceStore(profile.trace_dir),
-            policy=policy,
-            budgets=profile.budgets,
-            approval_gate=gate,
-            sanitizer=ObservationSanitizer(max_chars=profile.sanitizer_max_chars),
-            memory=memory,
-            memory_token_budget=profile.memory_token_budget,
-        )
-    )
-
-
-def build_trace_replay_runtime(
-    profile: RunProfile,
-    reference_events: list[TraceEvent],
-    *,
-    approve_prompt: bool = False,
-) -> CoreRuntime:
-    """Same wiring as ``build_runtime`` with trace-scripted model and recorded tools."""
-
-    tools = starter_tools(profile.tool_root)
-    policy = _tool_policy(profile, tools)
-
-    memory = None
-    if profile.memory_adapter == "inmemory":
-        memory = InMemoryMemoryPort()
-    elif profile.memory_adapter == "simplemem_cross":
-        memory = SimpleMemCrossMemoryPort(
-            project=profile.memory_cross_project,
-            database_path=profile.memory_cross_database,
-        )
-
-    if profile.auto_approve:
-        gate: ApprovalGate = StaticApprovalGate(approved=True)
-    elif approve_prompt:
-        gate = InteractiveApprovalGate()
-    else:
-        gate = StaticApprovalGate(approved=False)
-
-    messages = nap_messages_from_trace(reference_events)
-    recorded = observations_by_call_id(reference_events)
-
-    return CoreRuntime(
-        RuntimeConfig(
-            model=TraceReplayModelClient(messages),
-            tools=tools,
-            trace_store=JsonlTraceStore(profile.trace_dir),
-            policy=policy,
-            budgets=profile.budgets,
-            approval_gate=gate,
-            sanitizer=ObservationSanitizer(max_chars=profile.sanitizer_max_chars),
-            scheduler=ToolScheduler(recorded_observations=recorded),
-            memory=memory,
-            memory_token_budget=profile.memory_token_budget,
-        )
-    )
-
-
-def inspect_policy_payload(profile: RunProfile) -> dict[str, Any]:
-    tools_obj = starter_tools(profile.tool_root)
-    policy = _tool_policy(profile, tools_obj)
-
-    tools_meta: list[dict[str, Any]] = []
-    for name in sorted(policy.allowed_tools):
-        tool = tools_obj[name]
-        needs = tool.spec.risk_tier in policy.approval_required_tiers
-        tools_meta.append(
-            {
-                "name": name,
-                "risk_tier": tool.spec.risk_tier.value,
-                "tier_triggers_policy_approval": needs,
-                "effective_with_static_gate": (
-                    "allow"
-                    if not needs or profile.auto_approve
-                    else "denied_without_approval"
-                ),
-            }
-        )
-
-    unknown_starter = frozenset(tools_obj) - policy.allowed_tools
-    return {
-        "resolved_profile": describe_profile_dict(profile),
-        "policy": {
-            "allowed_tools": sorted(policy.allowed_tools),
-            "approval_required_risk_tiers": sorted(t.value for t in policy.approval_required_tiers),
-            "starter_tools_excluded_from_allowlist": sorted(unknown_starter),
-            "approval_gate_mode": (
-                "auto_approve_true" if profile.auto_approve else "auto_approve_false"
-            ),
-        },
-        "tools": tools_meta,
-        "risk_tiers_reference": sorted(t.value for t in RiskTier),
-    }
+        return version("naqsha")
+    except Exception:
+        return "0.0.0"
 
 
 def _add_profile_arguments(parser: argparse.ArgumentParser) -> None:
@@ -183,7 +48,8 @@ def _add_profile_arguments(parser: argparse.ArgumentParser) -> None:
         default="local-fake",
         help=(
             "Run Profile: path to a .json/.toml file, a bundled profile name "
-            "(for example local-fake), or a file under profiles/ or examples/profiles/."
+            "(for example local-fake), `.naqsha/profiles/` short names after `naqsha init`, "
+            "or profiles/ / examples/profiles/ in the working directory."
         ),
     )
     parser.add_argument(
@@ -205,7 +71,7 @@ def _add_profile_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _apply_profile_overrides(profile: RunProfile, args: argparse.Namespace) -> RunProfile:
+def _apply_profile_overrides(profile: Any, args: argparse.Namespace) -> Any:
     out = profile
     if args.trace_dir is not None:
         out = replace(out, trace_dir=args.trace_dir.expanduser().resolve())
@@ -216,9 +82,81 @@ def _apply_profile_overrides(profile: RunProfile, args: argparse.Namespace) -> R
     return out
 
 
+def _resolve_run_id(args: argparse.Namespace, trace_dir: Path) -> str:
+    if getattr(args, "latest", False):
+        rid = latest_run_id(trace_dir)
+        if not rid:
+            raise ValueError(f"No traces under {trace_dir}.")
+        return rid
+    rid = getattr(args, "run_id", None)
+    if not rid:
+        raise ValueError("run_id is required unless --latest is set.")
+    return rid
+
+
+def _do_reflect(
+    prog: str,
+    profile: Any,
+    run_id: str,
+    workspace_base: Path | None,
+) -> int:
+    trace_store = JsonlTraceStore(profile.trace_dir)
+    events = trace_store.load(run_id)
+    if not events:
+        print(
+            f"{prog}: no trace file for run id {run_id!r} under {profile.trace_dir}.",
+            file=sys.stderr,
+        )
+        return 2
+    base = workspace_base
+    if base is None:
+        base = Path.cwd() / ".naqsha" / "reflection-workspaces"
+    loop = SimpleReflectionLoop(workspace_parent=base.expanduser().resolve())
+    patch = loop.propose_patch(events)
+    if patch is None:
+        print(f"{prog}: reflection failed (empty trace).", file=sys.stderr)
+        return 2
+    print(
+        json.dumps(
+            {
+                "workspace": str(patch.workspace),
+                "summary": patch.summary,
+                "reliability_gate_passed": patch.reliability_gate_passed,
+                "ready_for_human_review": patch.ready_for_human_review,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="naqsha")
+    parser = argparse.ArgumentParser(
+        prog="naqsha",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Agent Workbench quick path: init → run → replay RUN_ID → eval save → "
+            "eval check → reflect|improve RUN_ID. "
+            "Traces default to .naqsha/traces when using workbench init."
+        ),
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {_version_string()}",
+    )
     subcommands = parser.add_subparsers(dest="command", required=True)
+
+    init_parser = subcommands.add_parser(
+        "init",
+        help="Create .naqsha/ Agent Workbench layout and a default profile.",
+    )
+    init_parser.add_argument(
+        "--profile-name",
+        default="workbench",
+        help="Name for ``.naqsha/profiles/<name>.json`` (default: workbench).",
+    )
 
     run_parser = subcommands.add_parser("run", help="Execute a query with Core Runtime.")
     _add_profile_arguments(run_parser)
@@ -230,6 +168,16 @@ def main(argv: list[str] | None = None) -> int:
             "Ignored when auto_approve is true (profile or --auto-approve)."
         ),
     )
+    run_parser.add_argument(
+        "--human",
+        action="store_true",
+        help="Print answer as plain text instead of JSON.",
+    )
+    run_parser.add_argument(
+        "--no-hint",
+        action="store_true",
+        help="Do not print a replay hint to stderr after a successful run.",
+    )
     run_parser.add_argument("query")
 
     replay_parser = subcommands.add_parser(
@@ -237,6 +185,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Inspect a QAOA Trace, or re-execute it using stored observations (no live tools).",
     )
     _add_profile_arguments(replay_parser)
+    replay_parser.add_argument(
+        "--latest",
+        action="store_true",
+        help="Use the most recently modified trace in trace_dir instead of a run_id.",
+    )
     replay_parser.add_argument(
         "--re-execute",
         action="store_true",
@@ -258,13 +211,94 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Print a short text summary instead of JSON (summary mode only).",
     )
-    replay_parser.add_argument("run_id")
+    replay_parser.add_argument("run_id", nargs="?", default=None)
 
     inspect_parser = subcommands.add_parser(
         "inspect-policy",
         help="Print resolved Run Profile Tool Policy snapshot (JSON).",
     )
     _add_profile_arguments(inspect_parser)
+
+    profile_parser = subcommands.add_parser(
+        "profile",
+        help="Profile commands (alias for parts of inspect-policy).",
+    )
+    profile_sub = profile_parser.add_subparsers(dest="profile_cmd", required=True)
+    profile_show = profile_sub.add_parser(
+        "show",
+        help="Same as inspect-policy: resolved profile and Tool Policy (JSON).",
+    )
+    _add_profile_arguments(profile_show)
+
+    trace_parser = subcommands.add_parser("trace", help="Trace inspection commands.")
+    trace_sub = trace_parser.add_subparsers(dest="trace_cmd", required=True)
+    trace_inspect = trace_sub.add_parser(
+        "inspect",
+        help="Summarize a QAOA Trace (same as replay without --re-execute).",
+    )
+    _add_profile_arguments(trace_inspect)
+    trace_inspect.add_argument(
+        "--latest",
+        action="store_true",
+        help="Use the most recent trace in trace_dir.",
+    )
+    trace_inspect.add_argument("run_id", nargs="?", default=None)
+    trace_inspect.add_argument(
+        "--human",
+        action="store_true",
+        help="Print a short text summary instead of JSON.",
+    )
+
+    tools_parser = subcommands.add_parser("tools", help="Tool listing.")
+    tools_sub = tools_parser.add_subparsers(dest="tools_cmd", required=True)
+    tools_list = tools_sub.add_parser(
+        "list",
+        help="List allowed tools and risk metadata for the resolved profile (JSON).",
+    )
+    _add_profile_arguments(tools_list)
+
+    eval_parser = subcommands.add_parser("eval", help="Regression expectations from traces.")
+    eval_sub = eval_parser.add_subparsers(dest="eval_cmd", required=True)
+    eval_save = eval_sub.add_parser(
+        "save",
+        help="Save expected answer + tool path from a trace into .naqsha/evals/<name>.json.",
+    )
+    _add_profile_arguments(eval_save)
+    eval_save.add_argument("run_id")
+    eval_save.add_argument(
+        "name",
+        help="Fixture name (filename without .json under .naqsha/evals/).",
+    )
+    eval_save.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Override output path (default: .naqsha/evals/<name>.json).",
+    )
+
+    eval_check = eval_sub.add_parser(
+        "check",
+        help="Verify trace matches a saved fixture, then re-execute and compare.",
+    )
+    _add_profile_arguments(eval_check)
+    eval_check.add_argument("run_id")
+    eval_check.add_argument(
+        "--name",
+        dest="fixture_name",
+        required=True,
+        help="Fixture name (loads .naqsha/evals/<name>.json).",
+    )
+    eval_check.add_argument(
+        "--fixture",
+        type=Path,
+        default=None,
+        help="Explicit path to fixture JSON (overrides --name).",
+    )
+    eval_check.add_argument(
+        "--approve-prompt",
+        action="store_true",
+        help="Prompt for approvals during re-execute replay (same as replay --re-execute).",
+    )
 
     reflect_parser = subcommands.add_parser(
         "reflect",
@@ -285,41 +319,30 @@ def main(argv: list[str] | None = None) -> int:
     )
     reflect_parser.add_argument("run_id")
 
+    improve_parser = subcommands.add_parser(
+        "improve",
+        help="Same as reflect: reviewed self-improvement patch workspace (+ IMPROVEMENT_NOTES.md).",
+    )
+    _add_profile_arguments(improve_parser)
+    improve_parser.add_argument(
+        "--workspace-base",
+        type=Path,
+        default=None,
+        help="Same as reflect --workspace-base.",
+    )
+    improve_parser.add_argument("run_id")
+
     args = parser.parse_args(argv)
 
     try:
-        profile = load_run_profile(args.profile)
-        profile = _apply_profile_overrides(profile, args)
-
-        if args.command == "inspect-policy":
-            print(json.dumps(inspect_policy_payload(profile), indent=2, sort_keys=True))
-            return 0
-
-        if args.command == "reflect":
-            trace_store = JsonlTraceStore(profile.trace_dir)
-            events = trace_store.load(args.run_id)
-            if not events:
-                print(
-                    f"{parser.prog}: no trace file for run id {args.run_id!r} "
-                    f"under {profile.trace_dir}.",
-                    file=sys.stderr,
-                )
-                return 2
-            base = args.workspace_base
-            if base is None:
-                base = Path.cwd() / ".naqsha" / "reflection-workspaces"
-            loop = SimpleReflectionLoop(workspace_parent=base.expanduser().resolve())
-            patch = loop.propose_patch(events)
-            if patch is None:
-                print(f"{parser.prog}: reflection failed (empty trace).", file=sys.stderr)
-                return 2
+        if args.command == "init":
+            path = init_agent_project(profile_name=args.profile_name)
             print(
                 json.dumps(
                     {
-                        "workspace": str(patch.workspace),
-                        "summary": patch.summary,
-                        "reliability_gate_passed": patch.reliability_gate_passed,
-                        "ready_for_human_review": patch.ready_for_human_review,
+                        "initialized": True,
+                        "profile": str(path),
+                        "message": f'Run: naqsha run --profile {path.stem} "your query"',
                     },
                     indent=2,
                     sort_keys=True,
@@ -327,13 +350,101 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 0
 
+        profile = load_run_profile(args.profile)
+        profile = _apply_profile_overrides(profile, args)
+
+        if args.command == "inspect-policy" or (
+            args.command == "profile" and args.profile_cmd == "show"
+        ):
+            print(json.dumps(inspect_policy_payload(profile), indent=2, sort_keys=True))
+            return 0
+
+        if args.command == "tools" and args.tools_cmd == "list":
+            payload = inspect_policy_payload(profile)
+            print(json.dumps(payload["tools"], indent=2, sort_keys=True))
+            return 0
+
+        if args.command == "eval" and args.eval_cmd == "save":
+            wb = AgentWorkbench(profile)
+            store = wb.trace_store()
+            events = store.load(args.run_id)
+            if not events:
+                print(
+                    f"{parser.prog}: no trace for run_id {args.run_id!r} "
+                    f"under {profile.trace_dir}.",
+                    file=sys.stderr,
+                )
+                return 2
+            fix = build_eval_fixture(name=args.name, events=events)
+            out = args.output
+            if out is None:
+                out = evals_dir() / f"{args.name}.json"
+            save_fixture(out, fix)
+            payload = {"saved": str(out), "fixture": fix.to_dict()}
+            print(json.dumps(payload, indent=2, sort_keys=True))
+            return 0
+
+        if args.command == "eval" and args.eval_cmd == "check":
+            wb = AgentWorkbench(profile)
+            fpath = args.fixture
+            if fpath is None:
+                fpath = evals_dir() / f"{args.fixture_name}.json"
+            if not fpath.is_file():
+                print(f"{parser.prog}: fixture not found: {fpath}", file=sys.stderr)
+                return 2
+            result = wb.check_eval_fixture(
+                args.run_id,
+                fpath,
+                approve_prompt=args.approve_prompt,
+            )
+            print(json.dumps(result, indent=2, sort_keys=True))
+            return 0 if result.get("passed") else 1
+
+        if args.command in ("reflect", "improve"):
+            return _do_reflect(
+                parser.prog,
+                profile,
+                args.run_id,
+                getattr(args, "workspace_base", None),
+            )
+
+        if args.command == "trace" and args.trace_cmd == "inspect":
+            trace_store = JsonlTraceStore(profile.trace_dir)
+            try:
+                run_id = _resolve_run_id(args, profile.trace_dir)
+            except ValueError as exc:
+                print(f"{parser.prog}: {exc}", file=sys.stderr)
+                return 2
+            summary = summarize_trace(trace_store, run_id)
+            if args.human:
+                fail_n = len(summary.failures)
+                print(f"run_id: {summary.run_id}")
+                print(f"queries: {', '.join(summary.queries) or '(none)'}")
+                print(f"observations: {len(summary.observations)}")
+                if summary.answer is not None:
+                    print(f"answer: {summary.answer}")
+                else:
+                    print("answer: (none)")
+                print(f"failures: {fail_n}")
+                for f in summary.failures:
+                    print(f"  - {f.get('code', '?')}: {f.get('message', '')}")
+                return 0
+            print(json.dumps(summary.__dict__, default=str, sort_keys=True))
+            return 0
+
         if args.command == "replay":
             trace_store = JsonlTraceStore(profile.trace_dir)
+            try:
+                run_id = _resolve_run_id(args, profile.trace_dir)
+            except ValueError as exc:
+                print(f"{parser.prog}: {exc}", file=sys.stderr)
+                return 2
+
             if args.re_execute:
-                reference = trace_store.load(args.run_id)
+                reference = trace_store.load(run_id)
                 if not reference:
                     print(
-                        f"{parser.prog}: no trace file for run id {args.run_id!r} "
+                        f"{parser.prog}: no trace file for run id {run_id!r} "
                         f"under {profile.trace_dir}.",
                         file=sys.stderr,
                     )
@@ -356,7 +467,7 @@ def main(argv: list[str] | None = None) -> int:
                         {
                             "failed": result.failed,
                             "failure_code": result.failure_code,
-                            "reference_run_id": args.run_id,
+                            "reference_run_id": run_id,
                             "replay_run_id": result.run_id,
                             "replay_answer": result.answer,
                             "answer_matches_reference": diff.answer_matches,
@@ -377,7 +488,7 @@ def main(argv: list[str] | None = None) -> int:
                     else 0
                 )
 
-            summary = summarize_trace(trace_store, args.run_id)
+            summary = summarize_trace(trace_store, run_id)
             if args.human:
                 fail_n = len(summary.failures)
                 print(f"run_id: {summary.run_id}")
@@ -397,12 +508,28 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "run":
             runtime = build_runtime(profile, approve_prompt=args.approve_prompt)
             result = runtime.run(args.query)
-            print(
-                json.dumps(
-                    {"run_id": result.run_id, "answer": result.answer, "failed": result.failed},
-                    sort_keys=True,
+            if args.human:
+                if result.answer is not None:
+                    print(result.answer)
+                else:
+                    print("(no answer)", file=sys.stderr)
+            else:
+                print(
+                    json.dumps(
+                        {
+                            "run_id": result.run_id,
+                            "answer": result.answer,
+                            "failed": result.failed,
+                        },
+                        sort_keys=True,
+                    )
                 )
-            )
+            if not args.no_hint and not result.failed:
+                hint = (
+                    f"{parser.prog}: hint: naqsha replay --profile "
+                    f"{args.profile!r} {result.run_id}"
+                )
+                print(hint, file=sys.stderr)
             return 1 if result.failed else 0
 
     except ProfileValidationError as exc:

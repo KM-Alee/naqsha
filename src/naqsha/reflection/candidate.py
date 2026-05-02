@@ -54,6 +54,21 @@ def build_candidate_markdown(events: list[TraceEvent], *, reliability_gate_passe
 
     lines.extend(
         [
+            "## Reviewed self-improvement checklist (human only)",
+            "",
+            "- Consider capturing a regression fixture: `naqsha eval save RUN_ID <name>` then "
+            "`naqsha eval check RUN_ID --name <name>`.",
+            "- Prefer Run Profile changes (model, budgets, allowed tools, memory adapter) over "
+            "prompt-only guidance.",
+            "- If tool selection was wrong, tighten tool descriptions/schemas in code and add "
+            "deterministic replay tests before widening **Tool Policy**.",
+            "- Do not merge **Reflection Patch** workspaces into the runtime without review; "
+            "no hotpatching **Approval Gate** or policy from trace text.",
+            "",
+        ]
+    )
+    lines.extend(
+        [
             "## Guidance (untrusted; for humans only)",
             "",
             "This file summarizes observable trace facts. It does not authorize runtime, "

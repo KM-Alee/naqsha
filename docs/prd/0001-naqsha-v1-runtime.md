@@ -8,7 +8,7 @@ NAQSHA should solve this by providing an inspectable Python agent runtime with a
 
 ## Solution
 
-NAQSHA will ship as a Python Package published under the `naqsha` distribution, with public project name, import package, and CLI all using `naqsha`. The V1 Interface Set is the Python library plus a thin CLI. MCP, hosted service behavior, UI products, multi-agent orchestration, and heavy planners are deferred.
+NAQSHA will ship as a Python Package published under the `naqsha` distribution, with public project name, import package, and CLI all using `naqsha`. The V1 Interface Set is the Python library plus a thin CLI. **Agent Workbench**—the `AgentWorkbench` façade and bundled `naqsha` subcommands—implements that CLI surface atop shared `naqsha.wiring` for project init, runs, trace tooling, replay, eval, reflection, and improvement entry points, without MCP or hosted services. MCP, hosted service behavior, UI products, multi-agent orchestration, and heavy planners are deferred.
 
 The Core Runtime will own the agent execution semantics. It will call a Model Client port to obtain validated NAP messages, enforce Tool Policy before executing any tool call, schedule approved tool calls through a conservative Tool Scheduler, sanitize every Untrusted Observation, persist runs as append-only JSONL QAOA Traces through a Trace Store, and write/read durable memory through a Memory Port. The default memory implementation will be a local SimpleMem-Cross Adapter, not the hosted SimpleMem MCP service.
 
@@ -152,6 +152,17 @@ NAQSHA V1 is accepted only when it passes the Reliability Gate: deterministic re
 - Claiming formal compliance with OWASP, NIST, or other governance frameworks.
 - Optimizing for a hard Core Runtime line-count target.
 - Building TypeScript, Rust, Go, or other SDKs in parallel with the Python package.
+
+## Agent Workbench
+
+Beyond the Core Runtime, NAQSHA presents an **Agent Workbench**: a first-class CLI and library surface for day-to-day agent development. The workbench is responsible for discoverability and workflow, not for changing execution semantics (those remain in the Core Runtime).
+
+- **CLI**: Commands such as `init`, `run`, `replay`, trace inspection, policy and tool listing, **eval** (regression comparison against saved expectations), and **improve** (reviewed **Reflection Patch** proposals). Legacy subcommands remain available where aliases preserve compatibility.
+- **Agent project**: A conventional `.naqsha/` directory under the working tree holds traces, optional eval fixtures, reflection workspaces, and references **Run Profiles** (explicit model, memory, tools, budgets, approvals).
+- **Library**: A small public facade (`naqsha.workbench`) loads profiles, builds runtimes via shared wiring (not CLI-only helpers), runs queries, replays traces, compares evals, and triggers improvement proposals—all without importing `naqsha.cli` for construction.
+- **Reviewed self-improvement**: The Reflection Loop may emit richer patch artifacts (e.g. profile or tool-doc suggestions, eval notes); merging into a live agent remains a human, out-of-band step. No automatic hotpatch of **Tool Policy**, **Approval Gate**, or active code.
+
+See ADR `docs/adr/0005-agent-workbench-and-reviewed-self-improvement.md`.
 
 ## Further Notes
 

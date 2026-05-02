@@ -218,7 +218,7 @@ Delivered:
   without Torch/Lance/pyarrow dependencies.
 - Run Profile keys `memory_cross_project` (default `default`), `memory_cross_database`
   (default `.naqsha/simplemem-cross.sqlite` resolved like other paths).
-- CLI `simplemem_cross` wires the adapter (`cli.build_runtime`).
+- CLI `simplemem_cross` wires the adapter (`naqsha.wiring.build_runtime`).
 - Golden tests: cross-session calculator recall, irrelevant suppression,
   latest-preference ordering, provenance echoes, malformed observation guard
   (`tests/test_memory_simplemem_cross.py`); hyphen-normalized adapter name parsing.
@@ -248,8 +248,8 @@ Delivered:
   **conversation transcript** from QAOA trace + Memory Port text (single source of truth for
   multi-turn tool loops); `models/http_json.py` centralizes JSON POST, HTTP error parsing
   (including Anthropic `type: error` envelopes), and header redaction; `models/errors.py` defines
-  `ModelInvocationError`; `models/factory.py` implements `model_client_from_profile` wired from
-  `cli.build_runtime`.
+  `ModelInvocationError`; `models/factory.py` implements `model_client_from_profile`, called from
+  `naqsha.wiring.build_runtime` (the CLI invokes the same wiring).
 - OpenAI-compatible Chat Completions (`models/openai_compat.py`): POST
   `{base_url}/chat/completions`; `tool_calls` / assistant text → NAP.
 - Anthropic Claude Messages API (`models/anthropic.py`): POST `{base_url}/v1/messages`;
@@ -392,15 +392,23 @@ Do not:
   false until `project_root` is a dev tree or tests inject `noop_gate_runner` (see
   `docs/reflection-patch-review.md`).
 
-## Phase 10: V1 Acceptance Review
+## Phase 10: Agent Workbench and V1 Acceptance Review
 
-Goal: decide whether v1 meets the PRD's Reliability Gate.
+Status: complete (Agent Workbench API and docs shipped; acceptance checkpoint in
+  `docs/release/0001-v1-agent-workbench-acceptance.md`). Maintainer-facing ADR sweeps and OWASP corpus
+  expansion remain routine follow-ups, not regressions against this checkpoint.
+
+Goal: ship the **Agent Workbench** (CLI + library facade + `.naqsha/` project convention + eval + reviewed improvement UX) and decide whether v1 meets the PRD **Reliability Gate**.
 
 Work to do:
 
+- **Agent Workbench**: `naqsha init`, workbench-oriented commands (`trace`, `profile`, `tools`, `eval`, `improve` as specified in PRD/ADR), human-readable `run` output options, `--version`, README walkthrough.
+- **Library**: `naqsha.workbench` facade and `naqsha.wiring` (or equivalent) for profile→runtime construction without importing `cli`.
+- **Eval**: save/compare expectations from traces; CLI and library entry points.
+- **Reviewed self-improvement**: extend Reflection Patch artifacts with eval/improvement notes where implemented; no hotpatch.
 - Run the full test suite, Ruff, packaging checks, replay tests, memory tests, and
   red-team tests.
-- Review every ADR against implementation behavior.
+- Review every ADR (including `0005-agent-workbench-and-reviewed-self-improvement.md`) against implementation behavior.
 - Review `CONTEXT.md` flagged ambiguities and mark any newly resolved ambiguity in
   docs or ADRs.
 - Check that `README.md`, `AGENTS.md`, examples, and this handoff document match
@@ -409,14 +417,15 @@ Work to do:
 
 Expected result:
 
+- New users can follow the flagship Agent Workbench walkthrough from `README.md`.
 - The project has a clear yes/no answer for v1 readiness.
 - Any remaining gaps are documented as explicit post-v1 work or blockers.
-- Future work can start from a stable baseline.
 
 Do not:
 
 - Accept v1 based only on a demo.
 - Ignore failing red-team, replay, memory, or packaging checks.
+- Add MCP to the Core Runtime or auto-merge Reflection Patches.
 
 ## AGENTS.md Update Rule
 

@@ -5,6 +5,9 @@ These JSON files show the supported Run Profile fields for `naqsha run`, `replay
 - Copy an example and adapt paths for your workstation.
 - The same defaults ship as bundled `local-fake` (built into the `naqsha` package).
 
+After **`naqsha init`**, a profile named **`workbench`** is created under `.naqsha/profiles/`
+and may be referenced as **`--profile workbench`** from that project directory.
+
 Resolve paths relative to **the profile file directory** (`trace_dir` and `tool_root`).
 
 ## Remote model adapters

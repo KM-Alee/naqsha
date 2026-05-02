@@ -18,6 +18,7 @@ from naqsha.reflection.workspace import create_isolated_workspace
 _CANDIDATE_MD = "CANDIDATE.md"
 _META_JSON = "meta.json"
 _READINESS = "READY_FOR_REVIEW.txt"
+_IMPROVEMENT_NOTES = "IMPROVEMENT_NOTES.md"
 
 
 class SimpleReflectionLoop:
@@ -79,6 +80,15 @@ class SimpleReflectionLoop:
                 "Reliability Gate did not pass. Do not treat this folder as review-ready.\n",
                 encoding="utf-8",
             )
+
+        (workspace / _IMPROVEMENT_NOTES).write_text(
+            "# Reviewed self-improvement\n\n"
+            "- Read `CANDIDATE.md` and `meta.json` in this workspace.\n"
+            "- Optional: save regression expectations with `naqsha eval save ...` "
+            "into `.naqsha/evals/` and reference them when reviewing.\n"
+            "- Do not merge or hotpatch the active runtime without human approval.\n",
+            encoding="utf-8",
+        )
 
         short = (
             f"run {trace[0].run_id}: gate {'ok' if passed else 'failed'}; "
