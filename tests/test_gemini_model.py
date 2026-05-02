@@ -38,6 +38,8 @@ def test_function_call_maps_to_nap(monkeypatch: pytest.MonkeyPatch) -> None:
         assert headers.get("x-goog-api-key") == "k"
         payload = json.loads(body.decode())
         assert payload["generationConfig"]["temperature"] == 0
+        decl = payload["tools"][0]["functionDeclarations"][0]
+        assert "additionalProperties" not in json.dumps(decl["parameters"])
         resp = {
             "candidates": [
                 {

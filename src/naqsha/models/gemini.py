@@ -22,6 +22,26 @@ from naqsha.tools.base import ToolSpec
 _PostFn = Callable[[str, dict[str, str], bytes, float], tuple[int, bytes]]
 
 
+def _gemini_parameters_schema(parameters: dict[str, Any]) -> dict[str, Any]:
+    """Drop schema keys Gemini rejects (e.g. ``additionalProperties``)."""
+
+    def strip(obj: Any) -> Any:
+        if isinstance(obj, dict):
+            return {
+                k: strip(v)
+                for k, v in obj.items()
+                if k != "additionalProperties"
+            }
+        if isinstance(obj, list):
+            return [strip(item) for item in obj]
+        return obj
+
+    out = strip(parameters)
+    if not isinstance(out, dict):
+        raise ModelInvocationError("Tool parameters schema must deserialize to an object.")
+    return out
+
+
 def _gemini_declarations(specs: list[ToolSpec]) -> list[dict[str, Any]]:
     decls = []
     for spec in sorted(specs, key=lambda s: s.name):
@@ -29,7 +49,7 @@ def _gemini_declarations(specs: list[ToolSpec]) -> list[dict[str, Any]]:
             {
                 "name": spec.name,
                 "description": spec.description,
-                "parameters": spec.parameters,
+                "parameters": _gemini_parameters_schema(spec.parameters),
             }
         )
     return decls

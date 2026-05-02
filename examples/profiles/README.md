@@ -1,5 +1,7 @@
 # Example Run Profiles
 
+End-to-end guides: **[User guide → Profiles & CLI](../docs/user-guide/03-run-profiles-and-cli.md)** and **[Getting started](../docs/user-guide/01-getting-started.md)**.
+
 These JSON files show the supported Run Profile fields for `naqsha run`, `replay`, and `inspect-policy`.
 
 - Copy an example and adapt paths for your workstation.

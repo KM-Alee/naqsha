@@ -23,11 +23,12 @@ dependencies = []
 
 [project.urls]
 Homepage = "https://github.com/KM-Alee/naqsha"
+Documentation = "https://github.com/KM-Alee/naqsha/tree/main/docs/user-guide"
 Repository = "https://github.com/KM-Alee/naqsha"
 Issues = "https://github.com/KM-Alee/naqsha/issues"
 
 [project.optional-dependencies]
-dev = ["build>=1.2", "pytest>=8", "ruff>=0.8"]
+dev = ["build>=1.2", "pytest>=8", "ruff>=0.8", "twine>=6"]
 memory = []
 # Reserved for richer HTTP/search backends; starter web tools use the stdlib only.
 web = []
@@ -39,11 +40,12 @@ naqsha = "naqsha.cli:main"
 packages = ["src/naqsha"]
 
 [tool.hatch.build.targets.sdist]
-include = ["LICENSE", "README.md", "/pyproject.toml", "/src"]
+include = ["LICENSE", "README.md", "/pyproject.toml", "/src", "/docs/user-guide"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = ["live_network: paid live API/tool tests (use NAQSHA_LIVE=1 + OPENAI_API_KEY)"]
 
 [tool.ruff]
 line-length = 100
