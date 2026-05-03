@@ -28,3 +28,8 @@ jobs:
 
       - name: Pytest
         run: uv run pytest
+
+      - name: MkDocs (strict)
+        env:
+          DISABLE_MKDOCS_2_WARNING: "true"
+        run: uv run mkdocs build --strict

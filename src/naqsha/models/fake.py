@@ -6,9 +6,10 @@ from collections import deque
 
 from naqsha.memory.base import MemoryRecord
 from naqsha.models.base import ModelClient
-from naqsha.protocols.nap import NapAnswer, NapMessage, parse_nap_message
+from naqsha.models.nap import NapAnswer, NapMessage, attach_span_context, parse_nap_message
 from naqsha.protocols.qaoa import TraceEvent
 from naqsha.tools.base import ToolSpec
+from naqsha.tracing.span import SpanContext
 
 
 class FakeModelClient(ModelClient):
@@ -25,7 +26,11 @@ class FakeModelClient(ModelClient):
         trace: list[TraceEvent],
         tools: list[ToolSpec],
         memory: list[MemoryRecord],
+        span_context: SpanContext | None = None,
+        instructions: str = "",
     ) -> NapMessage:
         if self.messages:
-            return self.messages.popleft()
-        return NapAnswer(text="Fake model has no more scripted messages.")
+            return attach_span_context(self.messages.popleft(), span_context)
+        return attach_span_context(
+            NapAnswer(text="Fake model has no more scripted messages."), span_context
+        )

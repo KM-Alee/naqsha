@@ -1,4 +1,4 @@
-"""Phase 3: Tool Policy, Approval Gate, Scheduler, and Budget guardrails."""
+"""Tool Policy, Approval Gate, Scheduler, and Budget guardrails."""
 
 from __future__ import annotations
 

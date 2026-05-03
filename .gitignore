@@ -44,3 +44,9 @@ Thumbs.db
 
 # NAQSHA local traces and scratch
 .naqsha/
+
+# Sandbox testing environment
+sandbox/
+
+# MkDocs output (generated; do not commit)
+site/

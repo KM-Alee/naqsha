@@ -88,12 +88,14 @@ def build_meta_json(
     *,
     reliability_gate_passed: bool,
     gate_result: ReliabilityGateResult | None,
+    auto_merged: bool = False,
 ) -> str:
     run_id = events[0].run_id if events else ""
     payload: dict[str, object] = {
         "run_id": run_id,
         "reliability_gate_passed": reliability_gate_passed,
         "ready_for_human_review": reliability_gate_passed,
+        "auto_merged": auto_merged,
     }
     if gate_result is not None:
         payload["reliability_gate"] = {

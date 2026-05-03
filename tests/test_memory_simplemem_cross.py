@@ -1,4 +1,4 @@
-"""Golden scenarios for SimpleMem-Cross-style durable memory (Phase 5)."""
+"""Golden scenarios for SimpleMem-Cross-style durable memory."""
 
 from __future__ import annotations
 

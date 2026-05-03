@@ -1,4 +1,4 @@
-"""Observation Sanitizer boundary tests (Phase 7 / Reliability Gate)."""
+"""Observation Sanitizer boundary tests (reliability gate)."""
 
 from __future__ import annotations
 

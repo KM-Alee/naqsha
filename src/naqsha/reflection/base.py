@@ -15,17 +15,47 @@ from naqsha.protocols.qaoa import TraceEvent
 
 @dataclass(frozen=True)
 class ReflectionPatch:
-    """Artifacts for human review. There is no merge, apply, or hotpatch API."""
+    """Artifacts for human review.
+
+    Merging into the active workspace is performed only by ``AutomatedRollbackManager``
+    inside the reflection package when workspace policy allows auto-merge; there is no
+    merge method on this object.
+    """
 
     workspace: Path
     summary: str
     reliability_gate_passed: bool
+    auto_merged: bool = False
 
     @property
     def ready_for_human_review(self) -> bool:
         """True when the Reliability Gate passed; merge still needs human approval."""
 
         return self.reliability_gate_passed
+
+
+class ReflectionPatchEventSink(Protocol):
+    """Callbacks for patch lifecycle (implemented by embedders using ``RuntimeEventBus``)."""
+
+    def patch_merged(
+        self,
+        *,
+        run_id: str,
+        agent_id: str,
+        patch_id: str,
+        auto_merged: bool,
+    ) -> None:
+        """Patch merged into the team workspace after Reliability Gate pass."""
+
+    def patch_rolled_back(
+        self,
+        *,
+        run_id: str,
+        agent_id: str,
+        patch_id: str,
+        reason: str,
+    ) -> None:
+        """Workspace restored after a failed post-merge boot check."""
 
 
 class ReflectionLoop(Protocol):

@@ -1,0 +1,200 @@
+/* NAQSHA init wizard — layout scales with terminal (scroll + fluid grids). */
+
+Screen {
+    layout: vertical;
+    background: $background 97%;
+}
+
+#wizard-shell {
+    height: 1fr;
+    width: 100%;
+    max-width: 100%;
+    align: center middle;
+    padding: 0 1 1 1;
+    min-height: 12;
+}
+
+#wizard-title {
+    text-align: center;
+    margin-bottom: 0;
+    padding-top: 1;
+    text-style: bold;
+    width: 100%;
+}
+
+#wizard-sub {
+    text-align: center;
+    margin-bottom: 1;
+    color: $text-muted 90%;
+    padding: 0 1;
+    width: 100%;
+}
+
+#wizard-steps-scroll {
+    height: 1fr;
+    min-height: 6;
+    width: 100%;
+    scrollbar-gutter: stable;
+}
+
+#wizard-steps-region {
+    height: auto;
+    min-height: 8;
+    width: 100%;
+    padding: 1 2;
+    background: $surface;
+    border: tall $primary 55%;
+    margin: 0 1;
+}
+
+.wizard-step {
+    height: auto;
+    width: 100%;
+    padding: 0 1 1 1;
+}
+
+.wizard-step.step-hidden {
+    display: none;
+}
+
+.step-heading {
+    margin-bottom: 1;
+    text-style: bold;
+}
+
+#wizard-steps-region Label {
+    margin-top: 1;
+    color: $text-muted;
+}
+
+#wizard-steps-region Input {
+    margin-bottom: 0;
+    width: 100%;
+    min-width: 8;
+    background: $boost;
+    border: tall $panel 40%;
+}
+
+#wizard-steps-region Input:focus {
+    border: tall $accent 70%;
+}
+
+#wizard-steps-region Checkbox {
+    margin-top: 1;
+}
+
+#wizard-steps-region Select {
+    margin-top: 1;
+    margin-bottom: 1;
+    width: 100%;
+    min-width: 12;
+}
+
+#paths-grid {
+    grid-size: 2;
+    grid-columns: auto 1fr;
+    grid-gutter: 0 1;
+    margin-top: 1;
+    width: 100%;
+}
+
+#team-grid {
+    grid-size: 2;
+    grid-columns: auto 1fr;
+    grid-gutter: 0 1;
+    margin-top: 1;
+    width: 100%;
+}
+
+#orch-b-grid,
+#wk-b-grid {
+    grid-size: 2;
+    grid-columns: auto 1fr;
+    grid-gutter: 0 1;
+    margin-top: 1;
+    width: 100%;
+}
+
+.budget-mini-head {
+    margin-top: 1;
+    color: $accent;
+}
+
+.provider-sub {
+    margin-top: 1;
+    padding: 1;
+    background: $boost;
+    border: round $secondary 35%;
+    height: auto;
+    width: 100%;
+}
+
+.provider-sub.provider-hidden {
+    display: none;
+}
+
+.prov-row {
+    height: auto;
+    width: 100%;
+    layout: horizontal;
+    margin-top: 1;
+}
+
+.prov-label {
+    width: auto;
+    min-width: 10;
+    max-width: 38%;
+    margin-top: 0;
+    padding-top: 1;
+    padding-right: 1;
+    color: $text-muted;
+}
+
+.prov-row Input {
+    width: 1fr;
+    min-width: 6;
+}
+
+#wizard-nav-bar {
+    height: auto;
+    width: 100%;
+    align: center middle;
+    margin-top: 1;
+    padding: 0 1;
+}
+
+#wizard-nav-bar Button {
+    margin: 0 1;
+    min-width: 14;
+}
+
+#wizard-status {
+    margin-top: 1;
+    min-height: 2;
+    text-align: center;
+    width: 100%;
+}
+
+#wizard-footer-hint {
+    margin-top: 1;
+    text-align: center;
+    color: $text-muted 85%;
+    padding: 0 1;
+    width: 100%;
+}
+
+Header {
+    background: $primary 16%;
+}
+
+Footer {
+    background: $panel;
+}
+
+Tooltip {
+    background: $boost;
+    color: $text;
+    border: tall $primary;
+    padding: 0 1;
+    text-style: bold;
+}

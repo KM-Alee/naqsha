@@ -1,0 +1,3 @@
+# 0007 Global Runtime with Local Agent Workspaces
+
+In NAQSHA V2, to support self-contained agents that can evolve independently, we adopt a "Global Runtime, Local Agent" model. The NAQSHA Core Runtime remains a shared, globally or environment-installed library. However, individual agents operate within their own isolated **Agent Workspaces** (self-contained directories). Each workspace holds its own `naqsha.toml` (Run Profile), memory database, trace logs, and custom tools. This ensures agents can autonomously modify their own tools and memory without affecting the core framework or other agents on the same system.

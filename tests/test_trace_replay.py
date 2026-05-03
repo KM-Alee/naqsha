@@ -1,4 +1,4 @@
-"""Phase 7: deterministic trace replay (model script + recorded observations)."""
+"""Deterministic trace replay (model script + recorded observations)."""
 
 import pytest
 

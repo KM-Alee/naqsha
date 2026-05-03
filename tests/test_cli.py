@@ -8,6 +8,8 @@ from io import StringIO
 from pathlib import Path
 
 from naqsha import cli
+from naqsha.core.budgets import BudgetLimits
+from naqsha.tui.wizard.init import render_workspace_toml
 
 
 def test_cli_inspect_policy_bundled_profile_json(tmp_path: Path, monkeypatch) -> None:
@@ -149,3 +151,47 @@ def test_cli_inspect_defaults_without_explicit_profile(monkeypatch, tmp_path: Pa
     with redirect_stdout(buf):
         assert cli.main(["inspect-policy"]) == 0
     assert json.loads(buf.getvalue())["resolved_profile"]["name"] == "local-fake"
+
+
+def test_cli_bare_without_workspace_hints_init(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    assert cli.main([]) == 2
+    err = capsys.readouterr().err.lower()
+    assert "naqsha.toml" in err
+    assert "init" in err
+
+
+def test_cli_bare_with_toml_no_tui_exits_plain(tmp_path: Path, monkeypatch, capsys) -> None:
+    b = BudgetLimits()
+    (tmp_path / "naqsha.toml").write_text(
+        render_workspace_toml(
+            workspace_name="cli-bare-smoke",
+            workspace_description="",
+            trace_dir=".naqsha/traces",
+            sanitizer_max_chars=4000,
+            auto_approve=False,
+            approval_required_tiers="write,high",
+            memory_db_path=".naqsha/memory.db",
+            num_total_agents=2,
+            memory_embeddings=False,
+            reflection_enabled=False,
+            reflection_auto_merge=False,
+            reflection_reliability_gate=True,
+            orch_budget_max_steps=b.max_steps,
+            orch_budget_max_tool_calls=b.max_tool_calls,
+            orch_budget_wall_seconds=b.wall_clock_seconds,
+            orch_budget_per_tool_seconds=b.per_tool_seconds,
+            orch_max_retries=3,
+            worker_budget_max_steps=b.max_steps,
+            worker_budget_max_tool_calls=b.max_tool_calls,
+            worker_budget_wall_seconds=b.wall_clock_seconds,
+            worker_budget_per_tool_seconds=b.per_tool_seconds,
+            worker_max_retries=3,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("NAQSHA_NO_TUI", "1")
+    assert cli.main([]) == 2
+    err = capsys.readouterr().err.lower()
+    assert "tui" in err

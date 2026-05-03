@@ -1,0 +1,9 @@
+name = "local-ollama"
+model = "ollama"
+trace_dir = ".naqsha/traces"
+tool_root = "."
+
+[ollama]
+base_url = "http://127.0.0.1:11434"
+model = "llama3.2"
+# api_key_env = "OLLAMA_API_KEY"  # optional; omit for local installs without auth

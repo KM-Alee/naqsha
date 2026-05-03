@@ -14,10 +14,11 @@ from naqsha.memory.base import MemoryRecord
 from naqsha.models.base import ModelClient
 from naqsha.models.errors import ModelInvocationError
 from naqsha.models.http_json import default_post, post_json
+from naqsha.models.nap import NapMessage, NapValidationError, attach_span_context, parse_nap_message
 from naqsha.models.trace_turns import trace_to_transcript, transcript_to_openai_chat_messages
-from naqsha.protocols.nap import NapMessage, NapValidationError, parse_nap_message
 from naqsha.protocols.qaoa import TraceEvent
 from naqsha.tools.base import ToolSpec
+from naqsha.tracing.span import SpanContext
 
 _PostFn = Callable[[str, dict[str, str], bytes, float], tuple[int, bytes]]
 
@@ -27,10 +28,13 @@ def trace_to_chat_messages(
     query: str,
     trace: list[TraceEvent],
     memory: list[MemoryRecord],
+    instructions: str = "",
 ) -> list[dict[str, Any]]:
     """Rebuild OpenAI Chat Completions ``messages`` from QAOA trace + memory."""
 
-    t = trace_to_transcript(query=query, trace=trace, memory=memory)
+    t = trace_to_transcript(
+        query=query, trace=trace, memory=memory, instructions=instructions
+    )
     return transcript_to_openai_chat_messages(t)
 
 
@@ -127,6 +131,8 @@ class OpenAiCompatModelClient(ModelClient):
         trace: list[TraceEvent],
         tools: list[ToolSpec],
         memory: list[MemoryRecord],
+        span_context: SpanContext | None = None,
+        instructions: str = "",
     ) -> NapMessage:
         api_key = os.environ.get(self._api_key_env, "").strip()
         if not api_key:
@@ -134,7 +140,9 @@ class OpenAiCompatModelClient(ModelClient):
                 f"Environment variable {self._api_key_env!r} is not set or empty."
             )
 
-        transcript = trace_to_transcript(query=query, trace=trace, memory=memory)
+        transcript = trace_to_transcript(
+            query=query, trace=trace, memory=memory, instructions=instructions
+        )
         messages = transcript_to_openai_chat_messages(transcript)
         url = f"{self._base_url}/chat/completions"
         payload = {
@@ -173,4 +181,4 @@ class OpenAiCompatModelClient(ModelClient):
         if not isinstance(message, dict):
             raise ModelInvocationError("choices[0].message must be an object.")
 
-        return _openai_message_to_nap(message)
+        return attach_span_context(_openai_message_to_nap(message), span_context)

@@ -1,0 +1,3 @@
+# 0009 Decorator-Driven API for Developer Experience
+
+In NAQSHA V2, to drastically improve developer experience and make building agents intuitive, we are moving away from verbose, class-based tool definitions. Instead, we adopt a **Decorator-Driven API** (similar to FastAPI). Developers will define tools using standard Python functions, type hints, and docstrings, annotated with an `@agent.tool` decorator. The framework will use introspection to automatically generate the strict JSON schemas, risk tiers, and execution contracts required by the Core Runtime and Tool Policy. This provides a low-boilerplate frontend while maintaining the strict safety and validation guarantees of the backend.

@@ -29,6 +29,28 @@ def test_gemini_profile_defaults(tmp_path: Path) -> None:
     assert "generativelanguage" in profile.gemini.base_url
 
 
+def test_ollama_profile_defaults(tmp_path: Path) -> None:
+    profile = parse_run_profile(
+        {"name": "o", "model": "ollama", "trace_dir": ".", "tool_root": "."},
+        base_dir=tmp_path,
+    )
+    assert profile.ollama is not None
+    assert profile.ollama.base_url == "http://127.0.0.1:11434"
+    assert profile.ollama.api_key_env is None
+
+
+def test_model_factory_builds_ollama(tmp_path: Path) -> None:
+    from naqsha.models.factory import model_client_from_profile
+    from naqsha.models.ollama import OllamaChatModelClient
+
+    profile = parse_run_profile(
+        {"name": "o", "model": "ollama", "trace_dir": ".", "tool_root": "."},
+        base_dir=tmp_path,
+    )
+    client = model_client_from_profile(profile)
+    assert isinstance(client, OllamaChatModelClient)
+
+
 def test_fake_model_with_anthropic_adapter_rejected(tmp_path: Path) -> None:
     with pytest.raises(ProfileValidationError, match="fake_model"):
         parse_run_profile(

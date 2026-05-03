@@ -52,6 +52,7 @@ def test_propose_patch_noop_gate_writes_artifacts(tmp_path: Path) -> None:
     ]
     loop = SimpleReflectionLoop(
         workspace_parent=tmp_path,
+        team_workspace=tmp_path,
         project_root=tmp_path,
         gate_runner=noop_gate_runner,
     )
@@ -68,6 +69,8 @@ def test_propose_patch_noop_gate_writes_artifacts(tmp_path: Path) -> None:
     body = (ws / "CANDIDATE.md").read_text(encoding="utf-8")
     assert run_id in body
     assert "done" in body
+    meta = json.loads((ws / "meta.json").read_text(encoding="utf-8"))
+    assert meta.get("auto_merged") is False
 
 
 def test_propose_patch_failing_gate_not_review_ready(tmp_path: Path) -> None:
@@ -75,6 +78,7 @@ def test_propose_patch_failing_gate_not_review_ready(tmp_path: Path) -> None:
     events = [query_event(run_id, "q"), failure_event(run_id, "budget", "max steps")]
     loop = SimpleReflectionLoop(
         workspace_parent=tmp_path,
+        team_workspace=tmp_path,
         project_root=tmp_path,
         gate_runner=failing_gate_runner,
     )
@@ -91,6 +95,7 @@ def test_propose_patch_failing_gate_not_review_ready(tmp_path: Path) -> None:
 def test_propose_patch_empty_trace_returns_none(tmp_path: Path) -> None:
     loop = SimpleReflectionLoop(
         workspace_parent=tmp_path,
+        team_workspace=tmp_path,
         project_root=tmp_path,
         gate_runner=noop_gate_runner,
     )

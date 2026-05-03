@@ -2,6 +2,7 @@ import json
 
 import pytest
 
+from naqsha.models.nap import nap_to_dict
 from naqsha.protocols.nap import NapAction, NapAnswer, NapValidationError, parse_nap_message
 from naqsha.protocols.qaoa import (
     QAOA_TRACE_SCHEMA_VERSION,
@@ -12,12 +13,56 @@ from naqsha.protocols.qaoa import (
     observation_event,
     query_event,
 )
+from naqsha.tracing.span import SpanContext
 
 
 def test_parse_final_answer() -> None:
     message = parse_nap_message({"kind": "answer", "text": "done"})
 
     assert message == NapAnswer(text="done")
+
+
+def test_parse_answer_with_span_context_round_trip() -> None:
+    ctx = SpanContext(
+        trace_id="tr",
+        span_id="sp",
+        parent_span_id=None,
+        agent_id="a1",
+    )
+    msg = parse_nap_message(
+        {
+            "kind": "answer",
+            "text": "hi",
+            "span_context": {
+                "trace_id": "tr",
+                "span_id": "sp",
+                "parent_span_id": None,
+                "agent_id": "a1",
+            },
+        }
+    )
+    assert isinstance(msg, NapAnswer)
+    assert msg.span_context == ctx
+    again = parse_nap_message(nap_to_dict(msg))
+    assert again == msg
+
+
+def test_parse_action_with_span_context() -> None:
+    msg = parse_nap_message(
+        {
+            "kind": "action",
+            "calls": [{"id": "c1", "name": "clock", "arguments": {}}],
+            "span_context": {
+                "trace_id": "t",
+                "span_id": "s",
+                "parent_span_id": "p",
+                "agent_id": "w",
+            },
+        }
+    )
+    assert isinstance(msg, NapAction)
+    assert msg.span_context is not None
+    assert msg.span_context.parent_span_id == "p"
 
 
 def test_parse_action_rejects_duplicate_call_ids() -> None:
@@ -158,7 +203,7 @@ def test_trace_event_from_dict_defaults_missing_schema_version() -> None:
     legacy = {k: v for k, v in event.to_dict().items() if k != "schema_version"}
     loaded = TraceEvent.from_dict(legacy)
 
-    assert loaded.schema_version == QAOA_TRACE_SCHEMA_VERSION
+    assert loaded.schema_version == 1
     assert loaded.kind == "query"
     assert loaded.payload == {"query": "hello"}
 

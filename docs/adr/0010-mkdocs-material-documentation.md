@@ -1,0 +1,3 @@
+# 0010 MkDocs-Material for Developer Documentation
+
+In NAQSHA V2, to meet the requirement of being an industry-standard Python library with excellent developer documentation, we adopt **MkDocs** (specifically the `mkdocs-material` theme) as the official documentation engine. Furthermore, we will use the `mkdocstrings` plugin to automatically generate API reference documentation directly from our Python source code. Since V2 relies heavily on a Decorator-Driven API with type hints and docstrings, this ensures our documentation is always accurate, beautifully formatted, and easy for developers to navigate without duplicating effort.

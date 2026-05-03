@@ -1,0 +1,76 @@
+[workspace]
+name = "CodeForge"
+orchestrator = "orch"
+description = "Multi-agent coding workspace."
+trace_dir = ".naqsha/traces"
+sanitizer_max_chars = 65536
+auto_approve = true
+approval_required_tiers = ["high", "write"]
+
+[memory]
+type = "sqlite"
+db_path = ".naqsha/memory.db"
+embeddings = false
+
+[reflection]
+enabled = false
+auto_merge = false
+reliability_gate = true
+
+[agents.orch]
+role = "orchestrator"
+model_adapter = "openai_compat"
+tools = ["calculator", "clock", "human_approval", "json_patch", "list_memory_tables", "memory_schema", "read_file", "run_shell", "web_fetch", "web_search", "write_file"]
+max_retries = 5
+instructions = "You coordinate repo-wide tasks: divide work, review outputs, run delegation instead of editing huge blobs yourself."
+
+[agents.orch.budgets]
+max_steps = 96
+max_tool_calls = 192
+wall_clock_seconds = 7200.0
+per_tool_seconds = 180.0
+
+[agents.orch.openai_compat]
+model = "gpt-4o-mini"
+base_url = "https://api.openai.com/v1"
+api_key_env = "OPENAI_API_KEY"
+timeout_seconds = 120.0
+
+[agents.worker1]
+role = "worker"
+model_adapter = "openai_compat"
+tools = ["calculator", "clock", "human_approval", "json_patch", "list_memory_tables", "memory_schema", "read_file", "run_shell", "web_fetch", "web_search", "write_file"]
+max_retries = 5
+instructions = "You implement concrete edits: read files before writes; prefer small patches and cite paths."
+
+[agents.worker1.budgets]
+max_steps = 64
+max_tool_calls = 160
+wall_clock_seconds = 5400.0
+per_tool_seconds = 120.0
+
+[agents.worker1.openai_compat]
+model = "gpt-4o-mini"
+base_url = "https://api.openai.com/v1"
+api_key_env = "OPENAI_API_KEY"
+timeout_seconds = 120.0
+
+[agents.worker2]
+role = "worker"
+model_adapter = "openai_compat"
+tools = ["calculator", "clock", "human_approval", "json_patch", "list_memory_tables", "memory_schema", "read_file", "run_shell", "web_fetch", "web_search", "write_file"]
+max_retries = 5
+instructions = "You implement concrete edits: read files before writes; prefer small patches and cite paths."
+
+[agents.worker2.budgets]
+max_steps = 64
+max_tool_calls = 160
+wall_clock_seconds = 5400.0
+per_tool_seconds = 120.0
+
+[agents.worker2.openai_compat]
+model = "gpt-4o-mini"
+base_url = "https://api.openai.com/v1"
+api_key_env = "OPENAI_API_KEY"
+timeout_seconds = 120.0
+

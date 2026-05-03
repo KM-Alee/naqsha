@@ -1,0 +1,95 @@
+# NAQSHA V2 documentation (MkDocs-Material). Build: uv run mkdocs build --strict
+site_name: NAQSHA
+site_description: Inspectable Python agent runtime with tool contracts, QAOA traces, and V2 Team Workspaces.
+site_url: https://km-alee.github.io/naqsha/
+repo_url: https://github.com/KM-Alee/naqsha
+repo_name: naqsha
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+site_dir: site
+
+exclude_docs: |
+  adr/**
+  prd/**
+  handoff/**
+  redteam/**
+  release/**
+  user-guide/**
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+    - search.suggest
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - search
+  - gen-files:
+      scripts:
+        - docs/gen_ref_pages.py
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            show_root_heading: true
+            show_if_no_docstring: true
+            members_order: source
+            separate_signature: true
+            show_signature_annotations: true
+            filters: ["!^_"]
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Concepts: concepts.md
+  - Tools: tools.md
+  - Teams: teams.md
+  - Memory: memory.md
+  - Reflection: reflection.md
+  - CLI & Workbench: cli.md
+  - Migration: migration.md
+  - API reference:
+      - Overview: reference/index.md
+      - naqsha (public): reference/naqsha.md
+      - Core Runtime: reference/core.md
+      - Models: reference/models.md
+      - Tools: reference/tools.md
+      - Memory: reference/memory.md
+      - Orchestration: reference/orchestration.md
+      - Tracing: reference/tracing.md
+      - Reflection: reference/reflection.md
+      - TUI: reference/tui.md

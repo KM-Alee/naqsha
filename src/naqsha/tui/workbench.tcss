@@ -1,0 +1,101 @@
+/* NAQSHA Workbench (single run) — same calm chrome as Command Center. */
+
+Screen {
+    layout: vertical;
+    background: $background 98%;
+}
+
+#workbench-body {
+    height: 1fr;
+    layout: vertical;
+}
+
+#main-row {
+    height: 3fr;
+    min-height: 10;
+    padding: 0 1 0 1;
+}
+
+#analytics-row {
+    height: 1fr;
+    min-height: 12;
+    max-height: 42%;
+    padding: 0 1 1 1;
+}
+
+#flame, #memory, #patch {
+    width: 1fr;
+    min-width: 26;
+    height: 1fr;
+    margin-right: 1;
+}
+
+#patch {
+    margin-right: 0;
+}
+
+/* Primary stream */
+#chat {
+    width: 2fr;
+    min-width: 44;
+    height: 1fr;
+    layout: vertical;
+    background: $surface;
+    border: round $primary 20%;
+    padding: 0 1 1 1;
+    margin-right: 1;
+}
+
+#chat:focus-within {
+    border: round $primary 42%;
+}
+
+ChatPanel RichLog {
+    height: 1fr;
+    background: $boost;
+    padding: 0 1;
+    scrollbar-gutter: stable;
+    border: none;
+}
+
+#side {
+    width: 1fr;
+    min-width: 32;
+    height: 1fr;
+}
+
+#budget {
+    margin-bottom: 1;
+}
+
+#spans {
+    height: 1fr;
+}
+
+#span-tree {
+    height: 1fr;
+    background: transparent;
+    padding: 0 1;
+    border: none;
+}
+
+Header {
+    background: $panel 42%;
+    color: $text;
+    text-style: none;
+}
+
+Footer {
+    background: $panel;
+    border-top: wide $panel 22%;
+    color: $text-muted 88%;
+}
+
+/* Tooltips */
+Tooltip {
+    background: $boost;
+    color: white;
+    border: tall $primary;
+    padding: 0 1;
+    text-style: bold;
+}

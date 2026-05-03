@@ -76,6 +76,7 @@ def trace_to_transcript(
     query: str,
     trace: list[TraceEvent],
     memory: list[MemoryRecord],
+    instructions: str = "",
 ) -> ConversationTranscript:
     """Rebuild a normalized transcript from query + trace + memory.
 
@@ -84,7 +85,11 @@ def trace_to_transcript(
     """
 
     mem = _memory_block(memory)
-    system_text = _SYSTEM_PROMPT + ("\n\n" + mem if mem else "")
+    system_base = _SYSTEM_PROMPT
+    ins = instructions.strip()
+    if ins:
+        system_base += "\n\n## Agent-specific instructions\n" + ins
+    system_text = system_base + ("\n\n" + mem if mem else "")
 
     turns_list: list[ConversationTurn] = []
     idx = 0

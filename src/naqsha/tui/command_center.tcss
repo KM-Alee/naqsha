@@ -1,0 +1,334 @@
+/* Command Center — Gruvbox Dark theme with high-contrast borders */
+
+Screen {
+    layout: vertical;
+    background: #1d2021;
+}
+
+#cc-body {
+    height: 1fr;
+    layout: vertical;
+    padding: 1 2;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   METRICS STRIP
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+#cc-run-metrics {
+    width: 100%;
+    height: auto;
+    padding: 1 2;
+    margin-bottom: 2;
+    background: #282828;
+    border: heavy #83a598;
+    color: #ebdbb2;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MAIN ROW: Chat + Sidebar
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+#main-row-cc {
+    height: 3fr;
+    min-height: 16;
+    layout: horizontal;
+    margin-bottom: 2;
+}
+
+#cc-chat-container {
+    width: 2fr;
+    min-width: 48;
+    height: 1fr;
+    layout: vertical;
+    background: #282828;
+    border: heavy #83a598;
+    padding: 1 2;
+    margin-right: 2;
+}
+
+#cc-chat-container:focus-within {
+    border: heavy #8ec07c;
+}
+
+#chat-cc {
+    height: 1fr;
+    min-height: 8;
+    margin-bottom: 2;
+}
+
+ChatPanel RichLog {
+    height: 1fr;
+    background: #32302f;
+    padding: 1 2;
+    scrollbar-gutter: stable;
+    border: tall #504945;
+    color: #ebdbb2;
+}
+
+#cc-query-row {
+    height: auto;
+    min-height: 3;
+    layout: horizontal;
+}
+
+#query-input-cc {
+    width: 1fr;
+    min-height: 3;
+    background: #32302f;
+    border: heavy #83a598;
+    padding: 0 1;
+    color: #ebdbb2;
+}
+
+#query-input-cc:focus {
+    border: heavy #8ec07c;
+    background: #3c3836;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SIDEBAR: Jobs + Budget + Spans
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+#side-cc {
+    width: 1fr;
+    min-width: 36;
+    height: 1fr;
+    layout: vertical;
+}
+
+#jobs-panel {
+    height: auto;
+    max-height: 30%;
+    min-height: 8;
+    background: #282828;
+    border: heavy #83a598;
+    padding: 1 2;
+    margin-bottom: 2;
+    color: #ebdbb2;
+}
+
+#budget-cc {
+    height: auto;
+    min-height: 8;
+    margin-bottom: 2;
+    background: #282828;
+    border: heavy #83a598;
+    padding: 1 2;
+}
+
+#spans-cc {
+    height: 1fr;
+    min-height: 12;
+    background: #282828;
+    border: heavy #83a598;
+    padding: 1 2;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ANALYTICS ROW: Flame + Memory + Patches
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+#analytics-row-cc {
+    height: 1fr;
+    min-height: 14;
+    max-height: 40%;
+    layout: horizontal;
+}
+
+#flame-cc {
+    width: 1fr;
+    min-width: 28;
+    height: 1fr;
+    background: #282828;
+    border: heavy #83a598;
+    padding: 1 2;
+    margin-right: 2;
+}
+
+#memory-cc {
+    width: 1fr;
+    min-width: 28;
+    height: 1fr;
+    background: #282828;
+    border: heavy #83a598;
+    padding: 1 2;
+    margin-right: 2;
+}
+
+#patch-cc {
+    width: 1fr;
+    min-width: 28;
+    height: 1fr;
+    background: #282828;
+    border: heavy #83a598;
+    padding: 1 2;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   HEADER & FOOTER
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+Header {
+    background: #282828;
+    color: #ebdbb2;
+    text-style: bold;
+    border-bottom: heavy #83a598;
+}
+
+Footer {
+    background: #282828;
+    border-top: heavy #83a598;
+    color: #d5c4a1;
+    dock: bottom;
+    height: auto;
+    layer: overlay;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TOOLTIPS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+Tooltip {
+    background: #3c3836;
+    color: #ebdbb2;
+    border: tall #8ec07c;
+    padding: 0 1;
+    text-style: bold;
+    layer: overlay;
+    offset: 0 -1;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MODAL SCREENS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+ModalScreen {
+    align: center middle;
+}
+
+_TomlEditorScreen, _TracePickerScreen, _SqlScreen, _ReadonlyTextModal, _ProfileScreen {
+    background: #1d2021 60%;
+}
+
+_TomlEditorScreen > Vertical,
+_TracePickerScreen > Vertical,
+_SqlScreen > Vertical,
+_ReadonlyTextModal > Vertical,
+_ProfileScreen > Vertical {
+    width: auto;
+    height: auto;
+    min-width: 90;
+    max-width: 130;
+    min-height: 28;
+    max-height: 45;
+    background: #282828;
+    border: heavy #8ec07c;
+    padding: 2 3;
+}
+
+_TomlEditorScreen Label,
+_TracePickerScreen Label,
+_SqlScreen Label,
+_ReadonlyTextModal Label,
+_ProfileScreen Label {
+    width: 100%;
+    height: auto;
+    padding: 0 0 1 0;
+    color: #ebdbb2;
+}
+
+#modal-editor, #modal-sql, #ro-text {
+    height: 1fr;
+    min-height: 16;
+    background: #32302f;
+    border: tall #83a598;
+    padding: 1;
+    margin: 1 0;
+    color: #ebdbb2;
+}
+
+#trace-pick-input, #new-profile-name {
+    width: 1fr;
+    height: 3;
+    background: #32302f;
+    border: tall #83a598;
+    padding: 0 1;
+    margin: 1 0;
+    color: #ebdbb2;
+}
+
+#trace-pick-input:focus, #new-profile-name:focus {
+    border: tall #8ec07c;
+    background: #3c3836;
+}
+
+#trace-list-preview, #profile-list-static {
+    width: 100%;
+    height: auto;
+    max-height: 20;
+    background: #32302f;
+    border: tall #504945;
+    padding: 1 2;
+    margin: 1 0;
+    overflow-y: auto;
+    color: #d5c4a1;
+}
+
+#sql-result {
+    width: 100%;
+    height: auto;
+    max-height: 12;
+    background: #32302f;
+    border: tall #504945;
+    padding: 1 2;
+    margin: 1 0;
+    overflow-y: auto;
+    color: #d5c4a1;
+}
+
+#modal-footer, _SqlScreen Horizontal, _TracePickerScreen Horizontal, _ProfileScreen Horizontal {
+    width: 100%;
+    height: auto;
+    layout: horizontal;
+    margin-top: 2;
+}
+
+#modal-footer Button,
+_SqlScreen Button,
+_TracePickerScreen Button,
+_ReadonlyTextModal Button,
+_ProfileScreen Button {
+    min-width: 18;
+    margin-right: 1;
+}
+
+Button {
+    height: 3;
+    min-width: 14;
+    border: heavy #83a598;
+    background: #32302f;
+    color: #ebdbb2;
+}
+
+Button:hover {
+    background: #504945;
+    border: heavy #8ec07c;
+}
+
+Button:focus {
+    border: heavy #8ec07c;
+    background: #3c3836;
+}
+
+Button.-primary {
+    background: #458588;
+    border: heavy #83a598;
+    color: #ebdbb2;
+    text-style: bold;
+}
+
+Button.-primary:hover {
+    background: #689d6a;
+    border: heavy #8ec07c;
+}

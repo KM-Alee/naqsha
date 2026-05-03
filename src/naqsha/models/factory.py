@@ -6,6 +6,7 @@ from naqsha.models.anthropic import AnthropicMessagesModelClient
 from naqsha.models.base import ModelClient
 from naqsha.models.fake import FakeModelClient
 from naqsha.models.gemini import GeminiGenerateContentModelClient
+from naqsha.models.ollama import OllamaChatModelClient
 from naqsha.models.openai_compat import OpenAiCompatModelClient
 from naqsha.profiles import DEFAULT_FAKE_SCRIPT, ProfileValidationError, RunProfile
 
@@ -52,6 +53,17 @@ def model_client_from_profile(profile: RunProfile) -> ModelClient:
             model=g.model,
             api_key_env=g.api_key_env,
             timeout_seconds=g.timeout_seconds,
+        )
+
+    if kind == "ollama":
+        if profile.ollama is None:
+            raise ProfileValidationError("ollama profile section is missing.")
+        o = profile.ollama
+        return OllamaChatModelClient(
+            base_url=o.base_url,
+            model=o.model,
+            api_key_env=o.api_key_env,
+            timeout_seconds=o.timeout_seconds,
         )
 
     raise ProfileValidationError(f"Unsupported model adapter {kind!r}.")

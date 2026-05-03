@@ -20,9 +20,60 @@ _Avoid_: core feature, platform requirement
 The first supported ways to use NAQSHA: Python library and CLI.
 _Avoid_: hosted platform, UI product, MCP adapter
 
+**Team Workspace**:
+A self-contained directory containing a team of agents (or a single agent), their topology, Run Profile, shared and private memory, traces, and custom tools.
+_Avoid_: single-agent only folder
+
 **Agent Workbench**:
 The CLI and library workflows that wrap the Core Runtime: initialize an agent project, run queries, inspect **QAOA Traces**, replay and evaluate runs, and generate **Reflection Patches** for reviewed self-improvement.
 _Avoid_: conflating workbench UX with Core Runtime execution rules
+
+**Role-Based Tool Policy**:
+The security model within a Team Workspace where each sub-agent is granted a strict, specific subset of tools based on its role.
+_Avoid_: all agents having all tools
+
+**Dynamic Memory Engine**:
+The V2 memory backend (backed by SQLite) that supports both **Shared Memory** (accessible by all agents in a team) and **Private Memory** (isolated to a specific agent), allowing autonomous DDL schema evolution and optional `sqlite-vec` embeddings.
+_Avoid_: static session-based memory only
+
+**MkDocs Documentation Engine**:
+The official documentation framework for V2, using MkDocs-Material and mkdocstrings to automatically generate beautiful, searchable developer documentation from Python docstrings and type hints.
+_Avoid_: raw markdown files without a static site generator
+
+**Domain-Driven src/ Layout**:
+The physical codebase structure for V2 that enforces architectural boundaries. The `src/naqsha/` directory is divided into strict domains (`core`, `models`, `tools`, `memory`, `orchestration`, `tracing`, `reflection`, `tui`) to ensure decoupling and maintainability.
+_Avoid_: flat file structures, circular dependencies between core and UI
+
+**Structured Error Escalation**:
+The error handling pattern where tool exceptions are caught and returned to the agent as structured observations. If an agent fails repeatedly, a Circuit Breaker trips and escalates the failure to the Orchestrator.
+_Avoid_: crashing the process on minor errors, silent infinite loops
+
+**Circuit Breaker**:
+A safety mechanism that stops an agent if it repeatedly encounters the same error or exhausts its retry budget, preventing runaway costs.
+
+**Strict Internal Protocol (NAP V2)**:
+The internal communication standard of the Core Runtime. The runtime only speaks NAP V2; all provider-specific quirks are handled by isolated, thin Model Adapters.
+_Avoid_: provider-specific logic in the core runtime, heavy third-party translation libraries
+
+**Context-Aware Dependency Injection**:
+The pattern used in the Decorator-Driven API where the Core Runtime automatically injects runtime state (like `AgentContext`, memory connections, or trace spans) into a tool function if the developer includes it in the type signature.
+_Avoid_: global variables for tool state
+
+**Typed Event Bus**:
+The decoupling mechanism in V2 where the Core Runtime emits strongly-typed Pydantic events (e.g., `ToolInvoked`, `SpanCompleted`) instead of printing directly. The Workbench TUI (or any other adapter) subscribes to these events to render live updates.
+_Avoid_: hardcoding CLI/TUI logic into the core library
+
+**Decorator-Driven API**:
+The developer-friendly interface in V2 that uses Python decorators (e.g., `@agent.tool`) and type hints to automatically generate strict tool schemas and policies under the hood.
+_Avoid_: verbose class inheritance for tools
+
+**Workbench TUI**:
+The rich Terminal User Interface (TUI) that powers the Agent Workbench, providing interactive wizards for agent creation, visual management, and analytics directly in the terminal.
+_Avoid_: plain text CLI, local web dashboard
+
+**Tool-Based Delegation Model**:
+The mechanism for multi-agent orchestration where the Core Runtime automatically generates tools (e.g., `delegate_to_coder`) for the orchestrator, allowing sub-agents to be invoked as standard tool calls without requiring a complex graph or state machine.
+_Avoid_: heavy graph routers, complex message buses
 
 **Python Package**:
 The distributable NAQSHA library and CLI artifact intended for PyPI release under the `naqsha` distribution name.
@@ -44,9 +95,9 @@ _Avoid_: OpenAI client, raw provider response
 The default local Adapter that implements the Memory Port using SimpleMem-Cross session lifecycle and persistence.
 _Avoid_: hosted memory service, MCP default
 
-**QAOA Trace**:
-The persisted sequence of Query, Action, Observation, and Answer events for an agent run.
-_Avoid_: provider chat transcript, debug log
+**Hierarchical QAOA Trace**:
+The V2 evolution of the QAOA Trace that includes `span_id`, `parent_span_id`, and `agent_id` to support OpenTelemetry-style tracing across multi-agent teams. This enables the Workbench TUI to render flame graphs and detailed token/time analytics.
+_Avoid_: flat, unreadable trace logs for multi-agent runs
 
 **Trace Store**:
 The persistence boundary for QAOA Traces, defaulting to append-only JSONL files in v1.
@@ -101,12 +152,20 @@ A named configuration for model adapter, tools, budgets, memory, trace location,
 _Avoid_: hidden defaults, environment-only config
 
 **Reflection Loop**:
-The default v1 mechanism that turns evaluated run outcomes into reusable behavior guidance.
-_Avoid_: hidden learning, automatic policy rewrite
+The mechanism that turns evaluated run outcomes into reusable behavior guidance or autonomous code updates.
+_Avoid_: hidden learning, passive notes
 
 **Reflection Patch**:
-A code change generated by the Reflection Loop in an isolated workspace for human review.
-_Avoid_: runtime hotpatch, automatic merge
+A code change generated by the Reflection Loop. In V2, this may be automatically merged if it passes the Reliability Gate, subject to the Automated Rollback Manager.
+_Avoid_: unverified hotpatch
+
+**V2 Runtime**:
+The next generation of NAQSHA that allows agents to autonomously evolve their codebase using an Automated Rollback Manager.
+_Avoid_: V1 constraints
+
+**Automated Rollback Manager**:
+The safety mechanism that monitors an agent after an autonomous code update and reverts to the last known good state if the runtime crashes or fails to boot.
+_Avoid_: manual recovery only
 
 ## Relationships
 

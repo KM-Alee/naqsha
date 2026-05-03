@@ -1,4 +1,4 @@
-"""Phase 4: Starter Tool Set — schema, success, errors, policy tier, sanitizer boundary."""
+"""Starter Tool Set: schema, success, errors, policy tier, sanitizer boundary."""
 
 from __future__ import annotations
 

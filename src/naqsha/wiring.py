@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from naqsha.approvals import ApprovalGate, InteractiveApprovalGate, StaticApprovalGate
+from naqsha.core.event_bus import RuntimeEventBus
 from naqsha.memory.inmemory import InMemoryMemoryPort
 from naqsha.memory.simplemem_cross import SimpleMemCrossMemoryPort
 from naqsha.models.factory import model_client_from_profile
@@ -38,7 +39,12 @@ def tool_policy_for_profile(profile: RunProfile, tools: dict[str, Tool]) -> Tool
     )
 
 
-def build_runtime(profile: RunProfile, *, approve_prompt: bool = False) -> CoreRuntime:
+def build_runtime(
+    profile: RunProfile,
+    *,
+    approve_prompt: bool = False,
+    event_bus: RuntimeEventBus | None = None,
+) -> CoreRuntime:
     tools = starter_tools(profile.tool_root)
     policy = tool_policy_for_profile(profile, tools)
 
@@ -71,6 +77,8 @@ def build_runtime(profile: RunProfile, *, approve_prompt: bool = False) -> CoreR
             sanitizer=ObservationSanitizer(max_chars=profile.sanitizer_max_chars),
             memory=memory,
             memory_token_budget=profile.memory_token_budget,
+            event_bus=event_bus,
+            agent_instructions=profile.instructions,
         )
     )
 
@@ -80,6 +88,7 @@ def build_trace_replay_runtime(
     reference_events: list[TraceEvent],
     *,
     approve_prompt: bool = False,
+    event_bus: RuntimeEventBus | None = None,
 ) -> CoreRuntime:
     """Same wiring as ``build_runtime`` with trace-scripted model and recorded tools."""
 
@@ -117,6 +126,8 @@ def build_trace_replay_runtime(
             scheduler=ToolScheduler(recorded_observations=recorded),
             memory=memory,
             memory_token_budget=profile.memory_token_budget,
+            event_bus=event_bus,
+            agent_instructions=profile.instructions,
         )
     )
 

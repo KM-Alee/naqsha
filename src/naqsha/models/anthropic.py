@@ -13,10 +13,11 @@ from naqsha.memory.base import MemoryRecord
 from naqsha.models.base import ModelClient
 from naqsha.models.errors import ModelInvocationError
 from naqsha.models.http_json import default_post, post_json
+from naqsha.models.nap import NapMessage, NapValidationError, attach_span_context, parse_nap_message
 from naqsha.models.trace_turns import trace_to_transcript, transcript_to_anthropic_messages
-from naqsha.protocols.nap import NapMessage, NapValidationError, parse_nap_message
 from naqsha.protocols.qaoa import TraceEvent
 from naqsha.tools.base import ToolSpec
+from naqsha.tracing.span import SpanContext
 
 _PostFn = Callable[[str, dict[str, str], bytes, float], tuple[int, bytes]]
 
@@ -108,6 +109,8 @@ class AnthropicMessagesModelClient(ModelClient):
         trace: list[TraceEvent],
         tools: list[ToolSpec],
         memory: list[MemoryRecord],
+        span_context: SpanContext | None = None,
+        instructions: str = "",
     ) -> NapMessage:
         api_key = os.environ.get(self._api_key_env, "").strip()
         if not api_key:
@@ -115,7 +118,9 @@ class AnthropicMessagesModelClient(ModelClient):
                 f"Environment variable {self._api_key_env!r} is not set or empty."
             )
 
-        transcript = trace_to_transcript(query=query, trace=trace, memory=memory)
+        transcript = trace_to_transcript(
+            query=query, trace=trace, memory=memory, instructions=instructions
+        )
         system_text, anthropic_messages = transcript_to_anthropic_messages(transcript)
 
         url = f"{self._base_url}/v1/messages"
@@ -151,4 +156,4 @@ class AnthropicMessagesModelClient(ModelClient):
         )
 
         msg_content = parsed.get("content")
-        return _content_blocks_to_nap(msg_content)
+        return attach_span_context(_content_blocks_to_nap(msg_content), span_context)

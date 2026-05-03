@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from naqsha.core.event_bus import RuntimeEventBus
+from naqsha.core.events import PatchMerged, PatchRolledBack
 from naqsha.eval_fixtures import (
     EvalFixture,
     build_fixture_from_trace,
@@ -17,8 +19,9 @@ from naqsha.eval_fixtures import (
 from naqsha.models.trace_replay import TraceReplayExhausted
 from naqsha.profiles import RunProfile, load_run_profile
 from naqsha.protocols.qaoa import TraceEvent
-from naqsha.reflection.base import ReflectionPatch
+from naqsha.reflection.base import ReflectionPatch, ReflectionPatchEventSink
 from naqsha.reflection.loop import SimpleReflectionLoop
+from naqsha.reflection.rollback import AutomatedRollbackManager
 from naqsha.replay import (
     TraceReplayError,
     compare_replay,
@@ -30,6 +33,42 @@ from naqsha.scheduler import ReplayObservationMissing
 from naqsha.trace.jsonl import JsonlTraceStore
 from naqsha.trace_scan import latest_run_id, list_run_ids_by_recency
 from naqsha.wiring import build_runtime, build_trace_replay_runtime, inspect_policy_payload
+
+
+class RuntimeBusReflectionSink:
+    """Maps reflection lifecycle callbacks to ``PatchMerged`` / ``PatchRolledBack`` bus events."""
+
+    __slots__ = ("_bus", "_default_agent_id")
+
+    def __init__(self, bus: RuntimeEventBus, *, default_agent_id: str = "") -> None:
+        self._bus = bus
+        self._default_agent_id = default_agent_id
+
+    def patch_merged(
+        self,
+        *,
+        run_id: str,
+        agent_id: str,
+        patch_id: str,
+        auto_merged: bool,
+    ) -> None:
+        aid = agent_id or self._default_agent_id
+        self._bus.emit(
+            PatchMerged(run_id=run_id, agent_id=aid, patch_id=patch_id, auto_merged=auto_merged)
+        )
+
+    def patch_rolled_back(
+        self,
+        *,
+        run_id: str,
+        agent_id: str,
+        patch_id: str,
+        reason: str,
+    ) -> None:
+        aid = agent_id or self._default_agent_id
+        self._bus.emit(
+            PatchRolledBack(run_id=run_id, agent_id=aid, patch_id=patch_id, reason=reason)
+        )
 
 
 @dataclass
@@ -60,7 +99,31 @@ class AgentWorkbench:
     def build_runtime(self, *, approve_prompt: bool = False) -> CoreRuntime:
         return build_runtime(self._profile, approve_prompt=approve_prompt)
 
-    def run(self, query: str, *, approve_prompt: bool = False) -> RunResult:
+    def run(
+        self,
+        query: str,
+        *,
+        approve_prompt: bool = False,
+        rollback_manager: AutomatedRollbackManager | None = None,
+        patch_event_sink: ReflectionPatchEventSink | None = None,
+        event_bus: RuntimeEventBus | None = None,
+    ) -> RunResult:
+        mgr = rollback_manager or AutomatedRollbackManager()
+        cwd = self.paths().cwd
+
+        sink = patch_event_sink
+        if sink is None and event_bus is not None:
+            sink = RuntimeBusReflectionSink(event_bus)
+
+        def _health() -> bool:
+            try:
+                rt = self.build_runtime(approve_prompt=approve_prompt)
+                probe = rt.run("__naqsha_boot_probe__")
+                return not probe.failed
+            except Exception:
+                return False
+
+        mgr.verify_boot_if_pending(cwd, health_check=_health, event_sink=sink)
         return self.build_runtime(approve_prompt=approve_prompt).run(query)
 
     def policy_snapshot(self) -> dict[str, Any]:
@@ -134,6 +197,7 @@ class AgentWorkbench:
         run_id: str,
         *,
         workspace_parent: Path | None = None,
+        event_bus: RuntimeEventBus | None = None,
     ) -> ReflectionPatch | None:
         events = self.trace_store().load(run_id)
         if not events:
@@ -141,5 +205,10 @@ class AgentWorkbench:
         base = workspace_parent
         if base is None:
             base = Path.cwd() / ".naqsha" / "reflection-workspaces"
-        loop = SimpleReflectionLoop(workspace_parent=base.expanduser().resolve())
+        sink = RuntimeBusReflectionSink(event_bus) if event_bus is not None else None
+        loop = SimpleReflectionLoop(
+            workspace_parent=base.expanduser().resolve(),
+            team_workspace=self.paths().cwd,
+            patch_event_sink=sink,
+        )
         return loop.propose_patch(events)

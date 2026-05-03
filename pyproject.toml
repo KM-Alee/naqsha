@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "naqsha"
-version = "0.1.0"
-description = "Inspectable Python agent runtime with strict tool contracts, QAOA traces, and durable memory ports."
+version = "0.2.0"
+description = "Inspectable Python agent runtime with strict tool contracts, hierarchical QAOA traces, dynamic memory, multi-agent teams, and a rich Workbench TUI."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -19,16 +19,29 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Typing :: Typed",
 ]
-dependencies = []
+dependencies = ["pydantic>=2.0"]
 
 [project.urls]
 Homepage = "https://github.com/KM-Alee/naqsha"
-Documentation = "https://github.com/KM-Alee/naqsha/tree/main/docs/user-guide"
+Documentation = "https://km-alee.github.io/naqsha/"
 Repository = "https://github.com/KM-Alee/naqsha"
 Issues = "https://github.com/KM-Alee/naqsha/issues"
+Changelog = "https://github.com/KM-Alee/naqsha/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
-dev = ["build>=1.2", "pytest>=8", "ruff>=0.8", "twine>=6"]
+dev = [
+  "build>=1.2",
+  "mkdocs-gen-files>=0.5",
+  "mkdocs-material>=9.5",
+  "mkdocstrings[python]>=0.26",
+  "pytest>=8",
+  "pytest-asyncio>=0.23",
+  "ruff>=0.8",
+  "rich>=13.7",
+  "textual>=0.86",
+  "twine>=6",
+]
+tui = ["textual>=0.86", "rich>=13.7"]
 memory = []
 # Reserved for richer HTTP/search backends; starter web tools use the stdlib only.
 web = []
@@ -40,7 +53,7 @@ naqsha = "naqsha.cli:main"
 packages = ["src/naqsha"]
 
 [tool.hatch.build.targets.sdist]
-include = ["LICENSE", "README.md", "/pyproject.toml", "/src", "/docs/user-guide"]
+include = ["LICENSE", "README.md", "/pyproject.toml", "/mkdocs.yml", "/src", "/docs"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

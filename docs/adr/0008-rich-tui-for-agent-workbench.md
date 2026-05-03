@@ -1,0 +1,3 @@
+# 0008 Rich TUI for Agent Workbench
+
+In NAQSHA V2, to fulfill the requirement of a highly user-friendly, visual, and analytics-driven CLI without forcing developers to context-switch to a browser, the **Agent Workbench** will be implemented as a Rich Terminal User Interface (TUI). Using a framework like `Textual` or `Rich`, the CLI will provide interactive wizards for initializing agents, visual dashboards for monitoring agent analytics (token usage, costs, trace success rates), and management screens for agent configuration. This replaces the standard text-based command-line parser with a "pretty and great UX" terminal application.

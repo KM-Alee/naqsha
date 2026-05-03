@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from naqsha.budgets import BudgetLimits
-from naqsha.protocols.nap import NapValidationError, parse_nap_message
+from naqsha.models.nap import NapValidationError, parse_nap_message
 from naqsha.tools.base import RiskTier
 from naqsha.tools.starter import starter_tool_names
 
@@ -53,6 +53,17 @@ class GeminiProfileSection:
 
 
 @dataclass(frozen=True)
+class OllamaProfileSection:
+    """Ollama ``/api/chat`` settings (no secrets in profile files)."""
+
+    base_url: str = "http://127.0.0.1:11434"
+    model: str = "llama3.2"
+    #: When set, ``Authorization: Bearer`` is sent using this environment variable.
+    api_key_env: str | None = None
+    timeout_seconds: float = 120.0
+
+
+@dataclass(frozen=True)
 class RunProfile:
     """Named runtime choices for model, tools, memory, traces, approvals, budgets."""
 
@@ -75,6 +86,9 @@ class RunProfile:
     openai_compat: OpenAiCompatProfileSection | None = None
     anthropic: AnthropicProfileSection | None = None
     gemini: GeminiProfileSection | None = None
+    ollama: OllamaProfileSection | None = None
+    #: Appended to the system transcript for concrete model adapters.
+    instructions: str = ""
 
 
 DEFAULT_FAKE_SCRIPT: tuple[dict[str, Any], ...] = (
@@ -386,6 +400,40 @@ def _parse_gemini_section(raw: Any) -> GeminiProfileSection:
     )
 
 
+def _parse_ollama_section(raw: Any) -> OllamaProfileSection:
+    if raw is None:
+        return OllamaProfileSection()
+    if not isinstance(raw, Mapping):
+        raise ProfileValidationError("'ollama' must be an object/table.")
+    extra = set(raw) - {"base_url", "model", "api_key_env", "timeout_seconds"}
+    if extra:
+        raise ProfileValidationError(f"Unknown ollama keys: {sorted(extra)}.")
+    defaults = OllamaProfileSection()
+    base_url = _as_str(raw.get("base_url", defaults.base_url), "ollama.base_url")
+    model = _as_str(raw.get("model", defaults.model), "ollama.model")
+    api_key_raw = raw.get("api_key_env", defaults.api_key_env)
+    api_key_env: str | None
+    if api_key_raw is None:
+        api_key_env = None
+    elif isinstance(api_key_raw, str):
+        stripped = api_key_raw.strip()
+        api_key_env = stripped if stripped else None
+    else:
+        raise ProfileValidationError("ollama.api_key_env must be a string or null.")
+    timeout_seconds = float(
+        _as_positive_float(
+            raw.get("timeout_seconds", defaults.timeout_seconds),
+            "ollama.timeout_seconds",
+        )
+    )
+    return OllamaProfileSection(
+        base_url=base_url,
+        model=model,
+        api_key_env=api_key_env,
+        timeout_seconds=timeout_seconds,
+    )
+
+
 def parse_run_profile(data: Mapping[str, Any], *, base_dir: Path) -> RunProfile:
     """Build a RunProfile from a mapping; validate fields and coerce paths."""
 
@@ -406,6 +454,7 @@ def parse_run_profile(data: Mapping[str, Any], *, base_dir: Path) -> RunProfile:
     openai_blob = data.get("openai_compat")
     anthropic_blob = data.get("anthropic")
     gemini_blob = data.get("gemini")
+    ollama_blob = data.get("ollama")
 
     if openai_blob is not None and model != "openai_compat":
         raise ProfileValidationError(
@@ -417,32 +466,44 @@ def parse_run_profile(data: Mapping[str, Any], *, base_dir: Path) -> RunProfile:
         )
     if gemini_blob is not None and model != "gemini":
         raise ProfileValidationError("'gemini' settings are only valid when model is 'gemini'.")
+    if ollama_blob is not None and model != "ollama":
+        raise ProfileValidationError("'ollama' settings are only valid when model is 'ollama'.")
 
-    if model not in {"fake", "openai_compat", "anthropic", "gemini"}:
+    if model not in {"fake", "openai_compat", "anthropic", "gemini", "ollama"}:
         raise ProfileValidationError(
             f"Unsupported model {model!r}. Supported values: 'fake', 'openai_compat', "
-            f"'anthropic', 'gemini'."
+            f"'anthropic', 'gemini', 'ollama'."
         )
 
     openai_section: OpenAiCompatProfileSection | None
     anthropic_section: AnthropicProfileSection | None
     gemini_section: GeminiProfileSection | None
+    ollama_section: OllamaProfileSection | None
     if model == "openai_compat":
         openai_section = _parse_openai_compat_section(openai_blob)
         anthropic_section = None
         gemini_section = None
+        ollama_section = None
     elif model == "anthropic":
         openai_section = None
         anthropic_section = _parse_anthropic_section(anthropic_blob)
         gemini_section = None
+        ollama_section = None
     elif model == "gemini":
         openai_section = None
         anthropic_section = None
         gemini_section = _parse_gemini_section(gemini_blob)
+        ollama_section = None
+    elif model == "ollama":
+        openai_section = None
+        anthropic_section = None
+        gemini_section = None
+        ollama_section = _parse_ollama_section(ollama_blob)
     else:
         openai_section = None
         anthropic_section = None
         gemini_section = None
+        ollama_section = None
 
     trace_dir = _resolve_path(data.get("trace_dir", ".naqsha/traces"), "trace_dir", base_dir)
     tool_root = _resolve_path(data.get("tool_root", "."), "tool_root", base_dir)
@@ -515,6 +576,14 @@ def parse_run_profile(data: Mapping[str, Any], *, base_dir: Path) -> RunProfile:
     budgets = _parse_budgets(data.get("budgets"))
     sanitizer_max_chars = _as_int(data.get("sanitizer_max_chars", 4000), "sanitizer_max_chars")
 
+    ins_raw = data.get("instructions")
+    if ins_raw is None or ins_raw == "":
+        instruct = ""
+    elif isinstance(ins_raw, str):
+        instruct = ins_raw.strip()
+    else:
+        raise ProfileValidationError("'instructions' must be a string or null.")
+
     return RunProfile(
         name=name,
         trace_dir=trace_dir,
@@ -533,6 +602,8 @@ def parse_run_profile(data: Mapping[str, Any], *, base_dir: Path) -> RunProfile:
         openai_compat=openai_section,
         anthropic=anthropic_section,
         gemini=gemini_section,
+        ollama=ollama_section,
+        instructions=instruct,
     )
 
 
@@ -568,6 +639,7 @@ def describe_profile_dict(profile: RunProfile) -> dict[str, Any]:
             "max_model_tokens": profile.budgets.max_model_tokens,
         },
         "sanitizer_max_chars": profile.sanitizer_max_chars,
+        "instructions": profile.instructions,
         "fake_model_scripted_messages": profile.fake_model_messages is not None,
         "openai_compat": (
             {
@@ -599,6 +671,16 @@ def describe_profile_dict(profile: RunProfile) -> dict[str, Any]:
                 "timeout_seconds": profile.gemini.timeout_seconds,
             }
             if profile.gemini
+            else None
+        ),
+        "ollama": (
+            {
+                "base_url": profile.ollama.base_url,
+                "model": profile.ollama.model,
+                "api_key_env": profile.ollama.api_key_env,
+                "timeout_seconds": profile.ollama.timeout_seconds,
+            }
+            if profile.ollama
             else None
         ),
     }

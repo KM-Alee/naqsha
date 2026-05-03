@@ -1,0 +1,3 @@
+# 0006 Autonomous Codebase Updates with Automated Rollback
+
+In NAQSHA V2, agents are permitted to autonomously update their own codebase (via **Reflection Patches**) without mandatory human review, provided they pass the **Reliability Gate**. Because an invalid patch could permanently break the agent's runtime, we introduce an **Automated Rollback Manager**. This manager monitors the runtime after an auto-merge and automatically reverts the codebase to the last known good state if the agent crashes or fails to boot. This trade-off accepts the risk of temporary instability in exchange for true autonomous self-evolution, mitigated by automated recovery.

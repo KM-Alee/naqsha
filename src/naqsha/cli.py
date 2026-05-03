@@ -9,12 +9,14 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from naqsha.core.event_bus import RuntimeEventBus
 from naqsha.eval_fixtures import build_fixture_from_trace as build_eval_fixture
 from naqsha.eval_fixtures import save_fixture
 from naqsha.models.trace_replay import TraceReplayExhausted
 from naqsha.profiles import ProfileValidationError, load_run_profile
 from naqsha.project import evals_dir, init_agent_project
 from naqsha.reflection.loop import SimpleReflectionLoop
+from naqsha.reflection.rollback import AutomatedRollbackManager
 from naqsha.replay import (
     TraceReplayError,
     compare_replay,
@@ -29,7 +31,15 @@ from naqsha.wiring import (
     build_trace_replay_runtime,
     inspect_policy_payload,
 )
-from naqsha.workbench import AgentWorkbench
+from naqsha.workbench import AgentWorkbench, RuntimeBusReflectionSink
+
+
+def _interactive_tui_enabled() -> bool:
+    try:
+        from naqsha.tui.app import cli_should_use_tui, tui_available
+    except ImportError:
+        return False
+    return bool(tui_available() and cli_should_use_tui())
 
 
 def _version_string() -> str:
@@ -111,7 +121,11 @@ def _do_reflect(
     base = workspace_base
     if base is None:
         base = Path.cwd() / ".naqsha" / "reflection-workspaces"
-    loop = SimpleReflectionLoop(workspace_parent=base.expanduser().resolve())
+    loop = SimpleReflectionLoop(
+        workspace_parent=base.expanduser().resolve(),
+        team_workspace=Path.cwd().resolve(),
+        patch_event_sink=RuntimeBusReflectionSink(RuntimeEventBus()),
+    )
     patch = loop.propose_patch(events)
     if patch is None:
         print(f"{prog}: reflection failed (empty trace).", file=sys.stderr)
@@ -123,6 +137,7 @@ def _do_reflect(
                 "summary": patch.summary,
                 "reliability_gate_passed": patch.reliability_gate_passed,
                 "ready_for_human_review": patch.ready_for_human_review,
+                "auto_merged": patch.auto_merged,
             },
             indent=2,
             sort_keys=True,
@@ -146,7 +161,7 @@ def main(argv: list[str] | None = None) -> int:
         action="version",
         version=f"%(prog)s {_version_string()}",
     )
-    subcommands = parser.add_subparsers(dest="command", required=True)
+    subcommands = parser.add_subparsers(dest="command", required=False)
 
     init_parser = subcommands.add_parser(
         "init",
@@ -334,8 +349,52 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
 
+    if args.command is None:
+        project = Path.cwd().resolve()
+        if (project / "naqsha.toml").is_file():
+            if _interactive_tui_enabled():
+                from naqsha.tui.command_center import run_command_center
+
+                run_command_center(cwd=project)
+                return 0
+            print(
+                f"{parser.prog}: found naqsha.toml but interactive TUI is disabled "
+                "(install the [tui] extra and ensure stdin/stdout are TTYs; "
+                "unset NAQSHA_NO_TUI if set).",
+                file=sys.stderr,
+            )
+            return 2
+        print(
+            f"{parser.prog}: no subcommand given and no naqsha.toml in {project}. "
+            "Run `naqsha init` to create a Team Workspace, then `naqsha --help` for commands.",
+            file=sys.stderr,
+        )
+        return 2
+
     try:
         if args.command == "init":
+            if _interactive_tui_enabled():
+                from naqsha.tui.wizard.init import run_init_wizard
+
+                toml_path = run_init_wizard(
+                    cwd=Path.cwd(), profile_name=args.profile_name
+                )
+                print(
+                    json.dumps(
+                        {
+                            "initialized": True,
+                            "naqsha_toml": str(toml_path),
+                            "message": (
+                                "Team Workspace written. "
+                                "Run: naqsha run --profile <profile> \"query\" "
+                                "(see .naqsha/profiles/)"
+                            ),
+                        },
+                        indent=2,
+                        sort_keys=True,
+                    )
+                )
+                return 0
             path = init_agent_project(profile_name=args.profile_name)
             print(
                 json.dumps(
@@ -506,6 +565,58 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.command == "run":
+            mgr = AutomatedRollbackManager()
+            bus = RuntimeEventBus()
+            patch_sink = RuntimeBusReflectionSink(bus)
+
+            def _boot_health() -> bool:
+                try:
+                    probe_rt = build_runtime(profile, approve_prompt=args.approve_prompt)
+                    probe = probe_rt.run("__naqsha_boot_probe__")
+                    return not probe.failed
+                except Exception:
+                    return False
+
+            mgr.verify_boot_if_pending(
+                Path.cwd(),
+                health_check=_boot_health,
+                event_sink=patch_sink,
+            )
+            if _interactive_tui_enabled():
+                from naqsha.tui.app import build_workbench_app
+
+                runtime = build_runtime(
+                    profile, approve_prompt=args.approve_prompt, event_bus=bus
+                )
+                app = build_workbench_app(runtime=runtime, query=args.query)
+                app.run()
+                result = app.last_result
+                if result is None:
+                    return 130
+                if args.human:
+                    if result.answer is not None:
+                        print(result.answer)
+                    else:
+                        print("(no answer)", file=sys.stderr)
+                else:
+                    print(
+                        json.dumps(
+                            {
+                                "run_id": result.run_id,
+                                "answer": result.answer,
+                                "failed": result.failed,
+                            },
+                            sort_keys=True,
+                        )
+                    )
+                if not args.no_hint and not result.failed:
+                    hint = (
+                        f"{parser.prog}: hint: naqsha replay --profile "
+                        f"{args.profile!r} {result.run_id}"
+                    )
+                    print(hint, file=sys.stderr)
+                return 1 if result.failed else 0
+
             runtime = build_runtime(profile, approve_prompt=args.approve_prompt)
             result = runtime.run(args.query)
             if args.human:

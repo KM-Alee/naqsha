@@ -6,9 +6,10 @@ from collections import deque
 
 from naqsha.memory.base import MemoryRecord
 from naqsha.models.base import ModelClient
-from naqsha.protocols.nap import NapMessage
+from naqsha.models.nap import NapMessage
 from naqsha.protocols.qaoa import TraceEvent
 from naqsha.tools.base import ToolSpec
+from naqsha.tracing.span import SpanContext
 
 
 class TraceReplayExhausted(RuntimeError):
@@ -28,8 +29,10 @@ class TraceReplayModelClient(ModelClient):
         trace: list[TraceEvent],
         tools: list[ToolSpec],
         memory: list[MemoryRecord],
+        span_context: SpanContext | None = None,
+        instructions: str = "",
     ) -> NapMessage:
-        del query, trace, tools, memory
+        del query, trace, tools, memory, span_context, instructions
         if not self._messages:
             raise TraceReplayExhausted(
                 "Trace replay ran out of scripted model messages before the run finished."
