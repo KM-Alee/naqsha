@@ -39,6 +39,7 @@ NAQSHA is a **production-shaped Python agent runtime**—not a thin wrapper arou
 - [Repository layout](#repository-layout)
 - [Contributing](#contributing)
 - [License](#license)
+- [LLM reference (llm.txt)](#llm-reference)
 
 ---
 
@@ -717,8 +718,30 @@ naqsha/
 
 ---
 
+## LLM reference
+
+[`llm.txt`](llm.txt) is a single-document reference designed to be dropped into an LLM context window. It covers:
+
+- Full vocabulary and terminology (what to say, what not to say)
+- Architecture overview and module ownership map
+- All 10 non-negotiable safety invariants
+- Complete `@agent.tool` API with type-hint → JSON Schema mapping
+- All 14 Typed Event Bus event types
+- Hierarchical QAOA Trace schema and replay patterns
+- Dynamic Memory Engine: DDL safelist, scopes, retrieval ranking
+- Multi-agent `naqsha.toml` format and Tool-Based Delegation internals
+- Model Adapter protocol and how to add a new one
+- Reflection Loop, Reliability Gate, and Automated Rollback Manager
+- Full CLI reference
+- Testing patterns (fake models, no API keys)
+- Extension points for first tasks
+- Index of every documentation page with its URL
+- Full source file index (`src/naqsha/**`)
+
+---
+
 <div align="center">
 
-**[Documentation](https://km-alee.github.io/naqsha/)** · **[PyPI](https://pypi.org/project/naqsha/)** · **[Changelog](CHANGELOG.md)** · **[Issues](https://github.com/KM-Alee/naqsha/issues)**
+**[Documentation](https://km-alee.github.io/naqsha/)** · **[PyPI](https://pypi.org/project/naqsha/)** · **[Changelog](CHANGELOG.md)** · **[Issues](https://github.com/KM-Alee/naqsha/issues)** · **[LLM reference](llm.txt)**
 
 </div>

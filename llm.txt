@@ -1,0 +1,1206 @@
+# NAQSHA — LLM Reference
+
+This file is the authoritative single-document reference for LLMs writing code against, extending,
+or maintaining the NAQSHA Python agent runtime. Read it top-to-bottom for full context, or use the
+section anchors below to jump to specific topics.
+
+Repository:  https://github.com/KM-Alee/naqsha
+Docs site:   https://km-alee.github.io/naqsha/
+PyPI:        https://pypi.org/project/naqsha/
+
+---
+
+## Table of contents
+
+1.  [Project identity and vocabulary](#1-project-identity-and-vocabulary)
+2.  [Architecture overview](#2-architecture-overview)
+3.  [Module ownership map](#3-module-ownership-map)
+4.  [Safety invariants (non-negotiable)](#4-safety-invariants-non-negotiable)
+5.  [Install and toolchain](#5-install-and-toolchain)
+6.  [Public API surface](#6-public-api-surface)
+7.  [Core Runtime](#7-core-runtime)
+8.  [Decorator-Driven API (@agent.tool)](#8-decorator-driven-api-agenttool)
+9.  [Typed Event Bus](#9-typed-event-bus)
+10. [Hierarchical QAOA Trace](#10-hierarchical-qaoa-trace)
+11. [Dynamic Memory Engine](#11-dynamic-memory-engine)
+12. [Multi-agent Team Workspaces](#12-multi-agent-team-workspaces)
+13. [Model Adapters (NAP V2)](#13-model-adapters-nap-v2)
+14. [Reflection Loop and Rollback Manager](#14-reflection-loop-and-rollback-manager)
+15. [Workbench TUI](#15-workbench-tui)
+16. [CLI reference](#16-cli-reference)
+17. [Configuration reference (naqsha.toml)](#17-configuration-reference-naqshatoml)
+18. [Testing and CI patterns](#18-testing-and-ci-patterns)
+19. [Extension points and first tasks](#19-extension-points-and-first-tasks)
+20. [Documentation page index](#20-documentation-page-index)
+21. [Source file index](#21-source-file-index)
+
+---
+
+## 1. Project identity and vocabulary
+
+**NAQSHA** (never "NAQSH") is a headless Python agent runtime. It is not a chat-API wrapper; it
+is a production-shaped execution engine with enforced contracts, append-only traces, and
+structured safety gates.
+
+Use this vocabulary at all times — the codebase, tests, and docs all use these exact terms:
+
+| Correct term                    | Do NOT say                            |
+|---------------------------------|---------------------------------------|
+| NAQSHA                          | NAQSH                                 |
+| Core Runtime                    | platform, app, engine                 |
+| Team Workspace                  | agent folder, agent workspace         |
+| Hierarchical QAOA Trace         | flat trace, provider transcript       |
+| NAP Action (V2)                 | free-form model instruction           |
+| Dynamic Memory Engine           | chat history, SimpleMem               |
+| Typed Event Bus                 | print statements, logging             |
+| Decorator-Driven API            | class-based tools                     |
+| Tool-Based Delegation Model     | graph routing, state machine          |
+| Automated Rollback Manager      | undo, git revert                      |
+| Workbench TUI                   | dashboard, web UI                     |
+| Role-Based Tool Policy          | per-agent permissions                 |
+| Circuit Breaker                 | retry limit, error handler            |
+| Tool Policy / Approval Gate     | prompt-only safety                    |
+
+Docs: https://km-alee.github.io/naqsha/concepts/
+
+---
+
+## 2. Architecture overview
+
+```
+Public API
+  naqsha CLI  ──►  AgentWorkbench  ──►  CoreRuntime
+  Workbench TUI  ──────────────────────────► RuntimeEventBus (subscribe only)
+
+Core Runtime (headless — never imports tui/)
+  CoreRuntime (run loop)
+    ├── Typed Event Bus (RuntimeEventBus)
+    ├── Tool Policy + Approval Gate
+    ├── Budget Meter (steps / tokens / tool-calls / wall-time)
+    ├── Circuit Breaker (per-tool consecutive failure tracking)
+    └── Tool Scheduler (serial + parallel)
+
+Adapters
+  Model Adapters  (OpenAI-compat / Anthropic / Gemini / Ollama / Fake)
+  Tool Registry + Decorator-Driven API  (@agent.tool)
+  Dynamic Memory Engine  (SQLite WAL, MemoryScope, DDL safelist)
+  Hierarchical QAOA Trace Store  (append-only JSONL)
+
+Orchestration
+  TeamTopology  (naqsha.toml)
+  Tool-Based Delegation  (delegate_to_<worker> tools)
+  team_runtime builders
+
+Safety
+  Observation Sanitizer  (runs before trace, memory, prompt injection)
+  Reflection Loop + Automated Rollback Manager
+```
+
+Key constraint: `core/` MUST NEVER import from `tui/`. The core is headless and must be
+importable without `textual` installed.
+
+---
+
+## 3. Module ownership map
+
+Every module has a single owner. Do not reach across these boundaries.
+
+### `src/naqsha/core/`
+Headless execution engine.
+- `runtime.py`        — CoreRuntime: orchestrates the agent run loop
+- `events.py`         — All Pydantic event models for the Typed Event Bus
+- `event_bus.py`      — RuntimeEventBus: subscribe, emit, async generator
+- `policy.py`         — Tool Policy: allow, deny, approval requirements
+- `scheduler.py`      — Serial vs. parallel execution, per-tool timeouts
+- `circuit_breaker.py`— Circuit Breaker: consecutive failure tracking
+- `budgets.py`        — BudgetMeter: hard caps for steps, tokens, tool calls, wall-clock
+- `approvals.py`      — StaticApprovalGate, InteractiveApprovalGate
+
+### `src/naqsha/models/`
+Provider translation. Core Runtime only speaks NAP V2.
+- `nap.py`            — NAP V2 protocol: NAPAction, NAPAnswer, SpanContext
+- `factory.py`        — model_client_from_profile
+- `trace_turns.py`    — Hierarchical QAOA Trace → neutral provider transcript
+- `openai_compat.py`, `anthropic.py`, `gemini.py`, `ollama.py`  — Thin Adapters
+- `trace_replay.py`   — TraceReplayModelClient for deterministic replay
+- `errors.py`         — ModelInvocationError
+- `http_json.py`      — JSON POST, HTTP error handling, header redaction
+
+### `src/naqsha/tools/`
+Decorator-Driven API, schema generation, execution.
+- `decorator.py`      — @agent.tool decorator; generates __tool_schema__ at decoration time
+- `registry.py`       — ToolRegistry: holds tools, exports schemas
+- `executor.py`       — ToolExecutor: resolves AgentContext injection, catches exceptions
+- `context.py`        — AgentContext: stable public API for tool authors
+- `starter.py`        — V2 Starter Tool Set (all defined with @agent.tool)
+- `decorated_adapter.py` — decorated_to_function_tool: bridges @agent.tool to FunctionTool
+
+### `src/naqsha/memory/`
+Dynamic Memory Engine.
+- `engine.py`         — DynamicMemoryEngine: SQLite + optional sqlite-vec
+- `scope.py`          — MemoryScope: enforces shared_ and private_<agent_id>_ prefixes
+- `ddl.py`            — DDL safelist enforcement
+- `retrieval.py`      — Token-budgeted retrieval (keyword + recency + optional semantic)
+- `sharing.py`        — TeamMemoryConfig / open_team_memory_engine
+
+### `src/naqsha/orchestration/`
+Team Workspace topology and Tool-Based Delegation.
+- `topology.py`       — TeamTopology parsed from naqsha.toml
+- `delegation.py`     — build_delegate_tool: runs nested worker CoreRuntime under child SpanContext
+- `team_runtime.py`   — build_team_orchestrator_runtime, build_worker_runtime
+
+### `src/naqsha/tracing/`
+Hierarchical QAOA Trace.
+- `protocols/qaoa.py` — V2 trace event models (QAOA_TRACE_SCHEMA_VERSION = 2)
+- `protocols/nap.py`  — NAP V2 models (re-exported from models/nap.py)
+- `span.py`           — Span, SpanContext, create_root_span()
+- `store.py`          — TraceStore: append-only JSONL, reads V1 and V2, writes V2
+- `sanitizer.py`      — ObservationSanitizer: runs before any trace/memory/prompt write
+- `replay.py`         — nap_messages_from_trace, observations_by_call_id, compare_replay
+
+### `src/naqsha/reflection/`
+Reflection Loop and Automated Rollback Manager.
+- `loop.py`           — SimpleReflectionLoop
+- `rollback.py`       — AutomatedRollbackManager: snapshot, restore, boot-status lifecycle
+- `reliability_gate.py` — run_reliability_gate_subprocess: runs pytest over gate paths
+- `config.py`         — ReflectionTomlSettings, load_reflection_toml_settings
+- `base.py`           — ReflectionPatch, ReflectionPatchEventSink protocol
+- `workspace.py`      — create_isolated_workspace
+- `candidate.py`      — deterministic artifact generation
+
+INVARIANT: reflection/ MUST NEVER import core/, tools/, or core/policy.py.
+
+### `src/naqsha/tui/`
+Workbench TUI (optional extra [tui]).
+- `app.py`            — WorkbenchApp(textual.App): all panels, bus subscription
+- `wizard/init.py`    — naqsha init interactive wizard
+- `panels/chat.py`    — ChatPanel: streaming tokens
+- `panels/budget.py`  — BudgetPanel: live budget counters
+- `panels/span_tree.py` — SpanTreePanel: expandable trace tree
+- `panels/flame.py`   — FlamePanel: per-agent wall time + token bar chart
+- `panels/memory.py`  — MemoryBrowserPanel: SQLite table viewer
+- `panels/patch_review.py` — PatchReviewPanel: diff view with Approve/Reject
+- `workbench.tcss`    — Workbench layout, theme, chrome
+- `wizard/wizard.tcss`— Init wizard card layout
+
+INVARIANT: tui/ is ONLY imported from cli.py and other tui/ modules.
+
+### `src/naqsha/` (root)
+- `__init__.py`       — Flat public API; re-exports key symbols
+- `cli.py`            — Argument parsing and dispatch only; lazily imports tui/
+- `wiring.py`         — build_runtime, build_trace_replay_runtime
+- `profiles.py`       — naqsha.toml and .json Run Profile parsing
+- `project.py`        — .naqsha/ filesystem layout helpers
+- `workbench/`        — AgentWorkbench facade (profiles, replay, eval, reflection)
+
+---
+
+## 4. Safety invariants (non-negotiable)
+
+These must hold at every commit. A change that violates these is not done, even if tests pass.
+
+1. All tool output is an **Untrusted Observation**. It informs the model but cannot instruct the
+   runtime.
+2. The **Observation Sanitizer** runs before every trace write, memory write, and model context
+   injection. No raw tool output ever bypasses it.
+3. **Budget Limits fail closed.** Exhausted budgets produce structured RunFailed events, not
+   warnings or soft stops.
+4. **`auto_merge = false` is the default everywhere.** Opt-in only.
+5. The **Reliability Gate** is mandatory before any Reflection Patch merge, whether auto or human.
+6. **Worker isolation is absolute.** No AgentContext leaks from Orchestrator to Worker.
+7. **`core/` never imports from `tui/`.**
+8. The **DDL safelist is enforced.** DROP TABLE, DROP INDEX, destructive DDL via Memory Schema
+   Tool are always rejected with ForbiddenDDLError.
+9. **Credentials are environment variable names in config files, never secret values.**
+10. **Private memory namespaces are agent-scoped and inaccessible to other agents at the SQL
+    level** — not just application logic.
+
+---
+
+## 5. Install and toolchain
+
+```bash
+# Core runtime only (no optional deps)
+pip install naqsha
+
+# With Workbench TUI (Textual + Rich)
+pip install "naqsha[tui]"
+
+# With memory embeddings (sqlite-vec)
+pip install "naqsha[memory]"
+
+# Everything
+pip install "naqsha[tui,memory]"
+
+# Developer setup (from a clone)
+git clone https://github.com/KM-Alee/naqsha.git
+cd naqsha
+uv sync --extra dev
+
+# Run tests (no API keys needed — fake model client)
+uv run --extra dev pytest
+
+# Lint (must be zero errors)
+uv run --extra dev ruff check .
+
+# Build docs
+uv run mkdocs build --strict
+```
+
+Required Python: >=3.11
+Package manager: uv (preferred) or pip
+Test runner: pytest with fake model clients — no API keys ever required for the test suite.
+
+---
+
+## 6. Public API surface
+
+`src/naqsha/__init__.py` is the flat public API. Everything a library user needs is re-exported
+from there:
+
+```python
+from naqsha import (
+    agent,               # @agent.tool decorator namespace
+    tool,                # alias for agent.tool
+    AgentContext,        # injected into tool functions
+    CoreRuntime,         # headless run loop
+    TeamTopology,        # multi-agent topology from naqsha.toml
+    RuntimeEventBus,     # subscribe to typed events
+    # Key event models:
+    RunStarted, RunCompleted, RunFailed,
+    ToolInvoked, ToolCompleted, ToolErrored,
+    SpanOpened, SpanClosed,
+    BudgetProgress,
+    CircuitBreakerTripped,
+    StreamChunkReceived,
+    PatchMerged, PatchRolledBack,
+)
+
+# Wiring helpers
+from naqsha import build_runtime, build_trace_replay_runtime
+from naqsha import AgentWorkbench
+```
+
+Docs: https://km-alee.github.io/naqsha/reference/naqsha/
+
+---
+
+## 7. Core Runtime
+
+### Minimal library usage
+
+```python
+from naqsha import build_runtime, load_run_profile
+
+runtime = build_runtime(load_run_profile("local-fake"))
+result = runtime.run("What is 2 + 2?")
+print(result.answer)   # "4"
+print(result.failed)   # False
+```
+
+### With the Typed Event Bus
+
+```python
+from naqsha import build_runtime, load_run_profile, RuntimeEventBus
+from naqsha.core.events import ToolInvoked, RunCompleted
+
+bus = RuntimeEventBus()
+
+@bus.subscribe
+def on_tool(event: ToolInvoked):
+    print(f"tool called: {event.tool_name}")
+
+@bus.subscribe
+def on_done(event: RunCompleted):
+    print(f"answer: {event.answer}")
+
+runtime = build_runtime(load_run_profile("local-fake"), event_bus=bus)
+runtime.run("ping")
+```
+
+### RuntimeConfig fields
+
+| Field                   | Type                  | Description                                      |
+|-------------------------|-----------------------|--------------------------------------------------|
+| `agent_id`              | `str`                 | Identifier for this agent                        |
+| `workspace_path`        | `Path \| None`        | Workspace root directory                         |
+| `tools`                 | `list[FunctionTool]`  | Tool registry contents                           |
+| `memory`                | `MemoryPort \| None`  | Legacy memory port                               |
+| `shared_memory_scope`   | `MemoryScope \| None` | Team-wide memory scope                           |
+| `private_memory_scope`  | `MemoryScope \| None` | Agent-private memory scope                       |
+| `max_steps`             | `int`                 | Budget: max agent loop steps                     |
+| `max_tokens`            | `int`                 | Budget: max total tokens                         |
+| `max_tool_calls`        | `int`                 | Budget: max total tool calls                     |
+| `max_wall_seconds`      | `float`               | Budget: max wall-clock time                      |
+| `max_retries`           | `int`                 | Circuit Breaker threshold                        |
+| `span_context`          | `SpanContext \| None` | Parent span for hierarchical tracing             |
+| `event_bus`             | `RuntimeEventBus \| None` | Bus for live event emission                  |
+
+Docs: https://km-alee.github.io/naqsha/reference/core/
+
+---
+
+## 8. Decorator-Driven API (@agent.tool)
+
+### Minimal tool
+
+```python
+from naqsha.tools import agent, AgentContext
+
+@agent.tool(risk_tier="read", description="Return current UTC time.")
+def clock(ctx: AgentContext) -> str:
+    from datetime import datetime, UTC
+    return datetime.now(UTC).isoformat()
+```
+
+### Risk tiers
+
+| Tier          | Meaning                            | Default gate                        |
+|---------------|------------------------------------|-------------------------------------|
+| `read`        | Read-only; no side effects         | No approval required                |
+| `write`       | Writes data or state               | InteractiveApprovalGate in TTY mode |
+| `side-effect` | External side effects              | Requires explicit approval          |
+
+### Supported type hints → JSON Schema
+
+| Python type              | JSON Schema                             |
+|--------------------------|-----------------------------------------|
+| `str`                    | `string`                                |
+| `int`                    | `integer`                               |
+| `float`                  | `number`                                |
+| `bool`                   | `boolean`                               |
+| `Optional[T]`            | nullable T                              |
+| `list[T]`                | array with item schema                  |
+| `dict[str, T]`           | object with additionalProperties        |
+| Pydantic `BaseModel`     | object with full Pydantic schema        |
+| `AgentContext`           | injected at runtime; omitted from schema|
+
+`AgentContext` parameters are auto-injected and never exposed to models.
+Malformed signatures raise `ToolDefinitionError` at decoration time — not at runtime.
+
+### Complex params with Pydantic
+
+```python
+from naqsha.tools import agent, AgentContext
+from pydantic import BaseModel, Field
+
+class SearchParams(BaseModel):
+    query: str = Field(description="Search query.")
+    limit: int = Field(default=10, ge=1, le=100)
+
+@agent.tool(risk_tier="read", description="Search knowledge base.")
+async def search_kb(params: SearchParams, ctx: AgentContext) -> list[dict]:
+    scope = ctx.shared_memory
+    if scope is None:
+        return []
+    rows = scope.query(
+        "SELECT title, snippet FROM shared_articles WHERE snippet LIKE ? LIMIT ?",
+        (f"%{params.query}%", params.limit),
+    )
+    return [{"title": r[0], "snippet": r[1]} for r in rows]
+```
+
+### AgentContext fields
+
+| Field             | Type                  | Description                                     |
+|-------------------|-----------------------|-------------------------------------------------|
+| `agent_id`        | `str`                 | Current agent identifier                        |
+| `run_id`          | `str`                 | Unique run identifier                           |
+| `workspace_path`  | `Path \| None`        | Workspace root; None for in-memory runs         |
+| `shared_memory`   | `MemoryScope \| None` | Team-wide memory (shared_* tables)              |
+| `private_memory`  | `MemoryScope \| None` | Agent-private memory (private_<agent_id>_*)     |
+| `span`            | `Span \| None`        | Active trace span for custom metric recording   |
+
+### Starter Tool Set (naqsha.tools.starter)
+
+| Tool                  | Risk tier   | Description                                      |
+|-----------------------|-------------|--------------------------------------------------|
+| `clock`               | `read`      | Return current UTC time                          |
+| `list_files`          | `read`      | List files in a directory                        |
+| `read_file`           | `read`      | Read a file's contents                           |
+| `write_file`          | `write`     | Write content to a file                          |
+| `memory_schema`       | `write`     | Execute DDL schema changes (safelist enforced)   |
+| `list_memory_tables`  | `read`      | List all memory tables accessible to this agent  |
+
+Docs: https://km-alee.github.io/naqsha/tools/
+
+---
+
+## 9. Typed Event Bus
+
+All 14 event types emitted by the Core Runtime:
+
+| Event                   | Emitted when                                              |
+|-------------------------|-----------------------------------------------------------|
+| `RunStarted`            | Agent loop begins                                         |
+| `AgentActivated`        | A specific agent starts its loop (multi-agent)            |
+| `StreamChunkReceived`   | A chunk of the final answer is ready                      |
+| `ToolInvoked`           | A tool call is dispatched                                 |
+| `ToolCompleted`         | A tool call returns successfully                          |
+| `ToolErrored`           | A tool call fails or is denied by policy                  |
+| `SpanOpened`            | A new trace span is opened                                |
+| `SpanClosed`            | A trace span closes with metrics                          |
+| `BudgetProgress`        | Budget counters update (after each step/tool)             |
+| `CircuitBreakerTripped` | Circuit Breaker threshold reached                         |
+| `RunCompleted`          | Agent loop finishes with an answer                        |
+| `RunFailed`             | Agent loop exits with a failure                           |
+| `PatchMerged`           | A Reflection Patch was auto-merged                        |
+| `PatchRolledBack`       | A previously merged patch was rolled back                 |
+
+Subscribing:
+
+```python
+from naqsha import RuntimeEventBus
+from naqsha.core.events import BudgetProgress, SpanClosed
+
+bus = RuntimeEventBus()
+
+@bus.subscribe
+def on_budget(event: BudgetProgress):
+    print(f"steps used: {event.steps_used}/{event.steps_limit}")
+
+@bus.subscribe
+def on_span_close(event: SpanClosed):
+    print(f"span {event.span_id} closed: {event.token_count} tokens")
+```
+
+Docs: https://km-alee.github.io/naqsha/concepts/#typed-event-bus
+
+---
+
+## 10. Hierarchical QAOA Trace
+
+**Q**uery → **A**ction → **O**bservation → **A**nswer. The canonical record of a run.
+
+Every trace event (schema_version 2):
+
+```json
+{
+  "schema_version": 2,
+  "kind": "query | action | observation | answer | failure",
+  "trace_id": "abc123",
+  "span_id": "span_orch_001",
+  "parent_span_id": null,
+  "agent_id": "orch",
+  "run_id": "abc123",
+  "tool_name": "clock",
+  "call_id": "c1",
+  "payload": "2026-05-03T17:00:00+00:00",
+  "ts": 1746291600.0
+}
+```
+
+- `trace_id` = same as `run_id` for root spans
+- V1 traces (missing `span_id`) are auto-upgraded on load
+- `TraceStore` is append-only; no rewrite, no truncation
+
+### Programmatic trace access
+
+```python
+from naqsha.tracing.store import JsonlTraceStore
+
+store = JsonlTraceStore(".naqsha/traces")
+trace = store.load_latest()
+# trace.events → list of TraceEvent
+# trace.trace_id, trace.query, trace.answer
+```
+
+### Replay against recorded observations
+
+```python
+from naqsha import build_trace_replay_runtime, load_run_profile
+from naqsha.tracing.store import JsonlTraceStore
+
+store = JsonlTraceStore(".naqsha/traces")
+trace = store.load_latest()
+runtime = build_trace_replay_runtime(trace, load_run_profile("local-fake"))
+result = runtime.run(trace.query)
+assert result.answer == trace.answer   # deterministic; no network calls
+```
+
+Docs: https://km-alee.github.io/naqsha/reference/tracing/
+
+---
+
+## 11. Dynamic Memory Engine
+
+SQLite-backed (WAL mode) memory for Team Workspaces.
+
+```python
+from naqsha.memory import DynamicMemoryEngine
+
+engine = DynamicMemoryEngine(".naqsha/memory.db")
+shared  = engine.get_shared_scope()              # shared_* tables
+private = engine.get_private_scope("researcher") # private_researcher_* tables
+```
+
+### DDL safelist
+
+| Permitted                        | Forbidden (raises ForbiddenDDLError) |
+|----------------------------------|--------------------------------------|
+| `CREATE TABLE`                   | `DROP TABLE`                         |
+| `CREATE INDEX`                   | `DROP INDEX`                         |
+| `ALTER TABLE ADD COLUMN`         | `ALTER TABLE DROP COLUMN`            |
+|                                  | `DELETE`, `TRUNCATE` as DDL          |
+
+Regular DML (INSERT, SELECT, UPDATE, DELETE) is always permitted through MemoryScope directly.
+
+### Shared memory
+
+```python
+# Create schema (DDL safelist enforced)
+shared.execute("""
+    CREATE TABLE IF NOT EXISTS shared_notes (
+        id INTEGER PRIMARY KEY,
+        agent_id TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_ts INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+    )
+""")
+
+# Write
+shared.execute(
+    "INSERT INTO shared_notes (agent_id, content) VALUES (?, ?)",
+    ("researcher", "Finding: X implies Y"),
+)
+
+# Query
+rows = shared.query("SELECT agent_id, content FROM shared_notes ORDER BY created_ts DESC")
+```
+
+### Token-budgeted retrieval
+
+```python
+from naqsha.memory import MemoryRetriever
+
+retriever = MemoryRetriever(scope=shared, token_budget=512, table="shared_notes",
+                            content_column="content")
+results = retriever.retrieve("what implies Y")
+# Returns UNTRUSTED EVIDENCE wrapped string; ranking = keyword_hits*1_000_000 + created_ts
+```
+
+### Team memory (multi-agent)
+
+```python
+from naqsha.memory.sharing import open_team_memory_engine, TeamMemoryConfig
+from pathlib import Path
+
+config = TeamMemoryConfig(db_path=Path(".naqsha/memory.db"))
+engine = open_team_memory_engine(config)
+# Wired automatically by build_team_orchestrator_runtime from [memory] in naqsha.toml
+```
+
+Docs: https://km-alee.github.io/naqsha/memory/
+
+---
+
+## 12. Multi-agent Team Workspaces
+
+### naqsha.toml (complete example)
+
+```toml
+[workspace]
+name         = "research-team"
+orchestrator = "orch"
+auto_approve = false
+
+[memory]
+db_path = ".naqsha/memory.db"
+
+[reflection]
+enabled          = true
+auto_merge       = false   # ALWAYS false by default; opt-in only
+reliability_gate = true
+gate_paths       = ["tests/"]
+
+[agents.orch]
+role          = "orchestrator"
+model_adapter = "openai_compat"
+tools         = ["clock", "list_memory_tables"]
+max_steps     = 30
+max_tokens    = 8192
+
+[agents.orch.openai_compat]
+model       = "gpt-4o"
+api_base    = "https://api.openai.com/v1"
+api_key_env = "OPENAI_API_KEY"   # env var name — NEVER the key value
+
+[agents.researcher]
+role          = "worker"
+model_adapter = "openai_compat"
+tools         = ["clock", "read_file", "list_files", "list_memory_tables", "memory_schema"]
+max_retries   = 3
+max_steps     = 15
+max_tokens    = 4096
+
+[agents.researcher.openai_compat]
+model       = "gpt-4o-mini"
+api_base    = "https://api.openai.com/v1"
+api_key_env = "OPENAI_API_KEY"
+```
+
+### Python API
+
+```python
+from pathlib import Path
+from naqsha.orchestration.team_runtime import build_team_orchestrator_runtime
+from naqsha.orchestration.topology import parse_team_topology_file
+from naqsha import RuntimeEventBus
+
+bus  = RuntimeEventBus()
+topo = parse_team_topology_file(Path("naqsha.toml"))
+rt   = build_team_orchestrator_runtime(topo, workspace_path=Path("."), event_bus=bus)
+result = rt.run("Research and summarise topic X")
+print(result.answer)
+```
+
+### Tool-Based Delegation — how it works
+
+1. `build_team_orchestrator_runtime` auto-generates `delegate_to_<worker>` tools for each worker.
+2. The orchestrator calls `delegate_to_researcher(task="...")`.
+3. A new `CoreRuntime` is spawned with the worker's profile and a child `SpanContext`
+   (same `trace_id`; new `span_id`; `parent_span_id` = orchestrator span).
+4. The worker runs fully isolated — the orchestrator's `AgentContext` is NEVER passed.
+5. The worker's answer is returned as a `ToolObservation` to the orchestrator.
+6. If the worker's Circuit Breaker trips, the observation carries
+   `metadata["kind"] = "TaskFailedError"` and `metadata["circuit_breaker"] = True`.
+
+### Hierarchical trace fields
+
+| Field           | Orchestrator     | Worker              |
+|-----------------|------------------|---------------------|
+| `trace_id`      | shared `run_id`  | shared `run_id`     |
+| `agent_id`      | `"orch"`         | `"researcher"`      |
+| `span_id`       | `"span_orch_..."` | `"span_researcher_..."` |
+| `parent_span_id`| `null`           | `"span_orch_..."`   |
+
+Docs: https://km-alee.github.io/naqsha/teams/
+
+---
+
+## 13. Model Adapters (NAP V2)
+
+The Core Runtime only speaks **NAP V2**. Provider-specific formats live exclusively in adapter
+files (`models/openai_compat.py`, `models/anthropic.py`, `models/gemini.py`, `models/ollama.py`).
+There must be no `if provider == "openai"` checks outside these files.
+
+### Supported adapters
+
+| Adapter key      | Provider                                  | Notes                                  |
+|------------------|-------------------------------------------|----------------------------------------|
+| `fake`           | Built-in scripted model client            | No API keys; use for tests and CI      |
+| `openai_compat`  | OpenAI, Azure, Together, Groq, …          | Any /chat/completions endpoint         |
+| `anthropic`      | Anthropic Claude                          | ANTHROPIC_API_KEY                      |
+| `gemini`         | Google Gemini                             | GOOGLE_API_KEY                         |
+| `ollama`         | Local Ollama                              | base_url override for custom installs  |
+
+### NAP V2 action structure
+
+```python
+from naqsha.models.nap import NAPAction, NAPAnswer, SpanContext
+
+action = NAPAction(
+    kind="action",
+    calls=[{"id": "c1", "name": "clock", "arguments": {}}],
+    span_context=span_ctx,  # optional; attaches active span
+)
+answer = NAPAnswer(kind="answer", text="done")
+```
+
+### Adding a new model adapter
+
+1. Create `src/naqsha/models/<provider>.py`.
+2. Implement `ModelClient` protocol: `next_message(messages, tools, *, span_context=None)`.
+3. Register the adapter key in `models/factory.py` (`model_client_from_profile`).
+4. Add corresponding toml sub-table support in `profiles.py`.
+5. Write a test using the fake transcript replay fixture in `tests/models/`.
+
+Docs: https://km-alee.github.io/naqsha/reference/models/
+
+---
+
+## 14. Reflection Loop and Rollback Manager
+
+### Generate a patch
+
+```bash
+naqsha reflect --profile workbench <run_id>
+# Creates an isolated workspace under .naqsha/reflection-workspaces/reflection-patch-<stamp>/
+```
+
+### Auto-merge (opt-in)
+
+```toml
+[reflection]
+enabled          = true
+auto_merge       = true          # opt-in; false everywhere by default
+reliability_gate = true          # mandatory; auto_merge without this is silently ignored
+gate_paths       = ["tests/smoke/"]
+```
+
+### How auto-merge + rollback works
+
+1. Reliability Gate: runs `pytest` over `gate_paths` in a subprocess.
+2. If pytest fails → patch is discarded; nothing is written.
+3. If pytest passes → AutomatedRollbackManager:
+   a. Snapshots `naqsha.toml` and workspace files to `.naqsha/backups/<stamp>/`.
+   b. Applies the merge.
+   c. Sets `boot_status = pending`.
+4. On next `naqsha run` → boot probe verifies workspace health.
+5. If boot probe fails → workspace is restored from snapshot; `PatchRolledBack` is emitted.
+6. Manager prunes to 5 most recent backups.
+
+### Python API
+
+```python
+from naqsha.reflection.loop import SimpleReflectionLoop
+
+loop = SimpleReflectionLoop(project_root=Path("."))
+patch = loop.run(run_id="<run_id>", profile=profile)
+print(patch.ready_for_human_review)   # True if patch generated and gate passed
+print(patch.auto_merged)              # True only if auto_merge=true AND gate passed
+```
+
+Docs: https://km-alee.github.io/naqsha/reflection/
+Reference: https://km-alee.github.io/naqsha/reference/reflection/
+
+---
+
+## 15. Workbench TUI
+
+Requires `pip install "naqsha[tui]"`. Opens automatically when stdin/stdout are TTYs.
+Force plain output: `NAQSHA_NO_TUI=1 naqsha run ...`
+
+Default theme: **`tokyo-night`**
+
+### Panels
+
+| Panel              | Description                                                   |
+|--------------------|---------------------------------------------------------------|
+| **Chat**           | Streaming token output; tool call log; run lifecycle          |
+| **Budget**         | Live steps / tool calls / wall-clock progress bars            |
+| **Span Tree**      | Expandable trace tree built from SpanOpened/SpanClosed events |
+| **Flame Graph**    | Per-agent wall time and token totals stacked bar chart        |
+| **Memory Browser** | Read-only SQLite table viewer for workspace DB                |
+| **Patch Review**   | Diff view with Approve / Reject for Reflection Patches        |
+
+### naqsha init wizard
+
+```bash
+mkdir new-project && cd new-project
+naqsha init    # interactive wizard → writes naqsha.toml
+```
+
+### TUI visual standard (non-negotiable for new panels)
+
+- Cohesive theme: `tokyo-night` default
+- Clear typographic hierarchy (titles, muted hints, accent for actions)
+- Generous spacing and padding
+- `tall` / `rounded` borders with `$surface` / `$boost` depth
+- `.tcss` files colocated with the feature (per-panel `DEFAULT_CSS`)
+- No bare placeholder layouts in mergeable work
+
+Docs: https://km-alee.github.io/naqsha/cli/
+Reference: https://km-alee.github.io/naqsha/reference/tui/
+
+---
+
+## 16. CLI reference
+
+```
+naqsha [--profile PROFILE] <command> [options]
+```
+
+| Command                               | Description                                                  |
+|---------------------------------------|--------------------------------------------------------------|
+| `naqsha init`                         | Interactive workspace wizard → writes naqsha.toml            |
+| `naqsha run QUERY`                    | Execute a run; `--human` for plain text output               |
+| `naqsha run QUERY --approve-prompt`   | Interactive approval for write/side-effect tools             |
+| `naqsha replay [RUN_ID]`              | Summarise a trace; `--latest`; `--re-execute` for replay     |
+| `naqsha trace inspect [RUN_ID]`       | Summarise trace without re-executing                         |
+| `naqsha profile show`                 | Print resolved Run Profile JSON                              |
+| `naqsha profile inspect-policy`       | Print effective Tool Policy                                  |
+| `naqsha tools list`                   | List allowed tools with risk tiers                           |
+| `naqsha eval save RUN_ID NAME`        | Snapshot run as regression fixture                           |
+| `naqsha eval check RUN_ID --name NAME`| Verify run against saved regression fixture                  |
+| `naqsha reflect RUN_ID`               | Generate Reflection Patch workspace                          |
+| `naqsha improve RUN_ID`               | Alias for `reflect`                                          |
+
+Default profile: `local-fake`. After `naqsha init`, use `workbench`.
+
+Docs: https://km-alee.github.io/naqsha/cli/
+
+---
+
+## 17. Configuration reference (naqsha.toml)
+
+Full workspace config format:
+
+```toml
+[workspace]
+name         = "my-team"
+orchestrator = "orch"    # agent_id of the orchestrator
+auto_approve = false     # approve all write-tier tools automatically (dangerous)
+
+[memory]
+db_path           = ".naqsha/memory.db"
+enable_embeddings = false    # requires [memory] extra (sqlite-vec)
+
+[reflection]
+enabled          = true
+auto_merge       = false     # ALWAYS false by default
+reliability_gate = true
+gate_paths       = ["tests/"]
+
+[agents.orch]
+role          = "orchestrator"          # "orchestrator" or "worker"
+model_adapter = "openai_compat"         # fake | openai_compat | anthropic | gemini | ollama
+tools         = ["clock", "list_memory_tables"]   # strict allowlist
+max_retries   = 3         # Circuit Breaker threshold
+max_steps     = 20        # Budget: max steps
+max_tokens    = 4096      # Budget: max tokens
+
+[agents.orch.openai_compat]
+model       = "gpt-4o"
+api_base    = "https://api.openai.com/v1"
+api_key_env = "OPENAI_API_KEY"   # env var name — NEVER the secret value
+
+[agents.orch.anthropic]
+model       = "claude-3-5-sonnet-20241022"
+api_key_env = "ANTHROPIC_API_KEY"
+
+[agents.orch.gemini]
+model       = "gemini-1.5-flash"
+api_key_env = "GOOGLE_API_KEY"
+
+[agents.orch.ollama]
+model    = "llama3.2"
+base_url = "http://localhost:11434"
+
+# Fake model for tests / CI (no API keys)
+[agents.orch.fake_model]
+messages = [
+  { kind = "action", calls = [{ id = "c1", name = "clock", arguments = {} }] },
+  { kind = "answer", text = "done" },
+]
+```
+
+### JSON Run Profile (single-agent, legacy V1)
+
+```json
+{
+  "profile": "workbench",
+  "model_adapter": "openai_compat",
+  "model": "gpt-4o",
+  "api_base": "https://api.openai.com/v1",
+  "api_key_env": "OPENAI_API_KEY",
+  "tools": ["clock", "read_file", "list_files"],
+  "trace_dir": ".naqsha/traces",
+  "max_steps": 10,
+  "max_tokens": 2048
+}
+```
+
+### Environment variables
+
+| Variable            | Description                                |
+|---------------------|--------------------------------------------|
+| `NAQSHA_NO_TUI`     | Set to `1` to force plain JSON/text output |
+| `OPENAI_API_KEY`    | OpenAI-compatible key (via api_key_env)    |
+| `ANTHROPIC_API_KEY` | Anthropic key                              |
+| `GOOGLE_API_KEY`    | Google Gemini key                          |
+
+---
+
+## 18. Testing and CI patterns
+
+### Run the test suite
+
+```bash
+uv run --extra dev pytest          # all tests; fake models; no API keys
+uv run --extra dev pytest -x       # stop on first failure
+uv run --extra dev pytest -k test_name   # filter by name
+```
+
+### Writing tests — key patterns
+
+**Always use fake model clients:**
+
+```python
+from naqsha.models.trace_replay import TraceReplayModelClient
+# or
+# profiles: model_adapter = "fake" in naqsha.toml
+```
+
+**Tool tests:**
+
+```python
+from naqsha.tools import ToolExecutor, ToolRegistry, agent, AgentContext
+
+registry = ToolRegistry()
+
+@agent.tool(risk_tier="read", description="Test tool.")
+def my_tool(value: str, ctx: AgentContext) -> str:
+    return f"got: {value}"
+
+registry.register(my_tool)
+executor = ToolExecutor(registry)
+ctx = AgentContext(agent_id="test", run_id="r1")
+obs = executor.execute("my_tool", {"value": "hello"}, ctx)
+assert obs.payload == "got: hello"
+assert not obs.metadata.get("tool_error")
+```
+
+**Memory tests:**
+
+```python
+from naqsha.memory import DynamicMemoryEngine
+import tempfile, pathlib
+
+with tempfile.TemporaryDirectory() as tmp:
+    engine = DynamicMemoryEngine(pathlib.Path(tmp) / "mem.db")
+    shared = engine.get_shared_scope()
+    shared.execute("CREATE TABLE IF NOT EXISTS shared_t (id INTEGER PRIMARY KEY, v TEXT)")
+    shared.execute("INSERT INTO shared_t (v) VALUES (?)", ("hello",))
+    rows = shared.query("SELECT v FROM shared_t")
+    assert rows[0][0] == "hello"
+```
+
+**Event bus tests:**
+
+```python
+from naqsha import RuntimeEventBus
+from naqsha.core.events import RunCompleted
+
+received = []
+bus = RuntimeEventBus()
+
+@bus.subscribe
+def capture(event: RunCompleted):
+    received.append(event)
+
+# wire bus into runtime and run...
+assert len(received) == 1
+```
+
+### CI (`.github/workflows/ci.yml`)
+
+- Runs on Python 3.11 and 3.12
+- Steps: `uv sync --extra dev` → `ruff check .` → `pytest` → `mkdocs build --strict`
+- No API keys; all tests use fake model clients
+- Zero ruff errors required; zero pytest failures required
+
+---
+
+## 19. Extension points and first tasks
+
+Good scoped tasks for adding to the codebase:
+
+### Add a new @agent.tool to tools/starter.py
+
+1. Open `src/naqsha/tools/starter.py`.
+2. Add a function decorated with `@agent.tool(risk_tier=..., description=...)`.
+3. Supported return types: `str`, `dict`, Pydantic BaseModel, or any type (converted to string).
+4. Write a test in `tests/tools/`.
+5. Add the tool name to relevant profiles / naqsha.toml examples.
+
+### Add a new Model Adapter
+
+1. Create `src/naqsha/models/<provider>.py`.
+2. Implement `ModelClient`: `next_message(messages, tools, *, span_context=None) -> NAPAnswer`.
+3. Register key in `models/factory.py`.
+4. Add TOML config sub-table parsing in `profiles.py`.
+5. Write a test in `tests/models/`.
+
+### Add a new TUI panel
+
+1. Create `src/naqsha/tui/panels/<panel>.py` with a Textual widget class.
+2. Add colocated CSS in the widget's `DEFAULT_CSS` or a `.tcss` file.
+3. Subscribe to the relevant event type(s) from the Typed Event Bus.
+4. Register the panel in `src/naqsha/tui/app.py`.
+5. Must meet the Workbench visual standard (tokyo-night theme, proper borders, readable markup).
+
+### Expand the OWASP red-team corpus
+
+1. Add scenarios to `tests/redteam/` following existing patterns.
+2. Focus on: multi-agent delegation injection, Observation Sanitizer bypass attempts,
+   memory namespace escape, DDL safelist circumvention.
+
+### Improve Memory Schema Tool DDL error messages
+
+1. Open `src/naqsha/memory/ddl.py`.
+2. Improve `ForbiddenDDLError` messages to explain what is allowed and why the statement failed.
+3. The Memory Schema Tool (`tools/starter.py`) calls this; better messages help the model adapt.
+
+---
+
+## 20. Documentation page index
+
+All pages are on the hosted docs site at https://km-alee.github.io/naqsha/
+
+| Topic                        | URL                                                          |
+|------------------------------|--------------------------------------------------------------|
+| Home / overview              | https://km-alee.github.io/naqsha/                            |
+| Getting started              | https://km-alee.github.io/naqsha/getting-started/           |
+| Concepts and vocabulary      | https://km-alee.github.io/naqsha/concepts/                  |
+| Tools (Decorator-Driven API) | https://km-alee.github.io/naqsha/tools/                     |
+| Teams (naqsha.toml)          | https://km-alee.github.io/naqsha/teams/                     |
+| Memory (Dynamic Engine)      | https://km-alee.github.io/naqsha/memory/                    |
+| Reflection and rollback      | https://km-alee.github.io/naqsha/reflection/                |
+| CLI and Workbench TUI        | https://km-alee.github.io/naqsha/cli/                       |
+| Migration (V1 → V2)          | https://km-alee.github.io/naqsha/migration/                 |
+| API reference overview       | https://km-alee.github.io/naqsha/reference/                 |
+| API: naqsha (public)         | https://km-alee.github.io/naqsha/reference/naqsha/          |
+| API: Core Runtime            | https://km-alee.github.io/naqsha/reference/core/            |
+| API: Models / NAP V2         | https://km-alee.github.io/naqsha/reference/models/          |
+| API: Tools                   | https://km-alee.github.io/naqsha/reference/tools/           |
+| API: Memory                  | https://km-alee.github.io/naqsha/reference/memory/          |
+| API: Orchestration           | https://km-alee.github.io/naqsha/reference/orchestration/   |
+| API: Tracing                 | https://km-alee.github.io/naqsha/reference/tracing/         |
+| API: Reflection              | https://km-alee.github.io/naqsha/reference/reflection/      |
+| API: TUI                     | https://km-alee.github.io/naqsha/reference/tui/             |
+
+Additional docs on GitHub (excluded from the built site but readable):
+
+| Topic                              | URL                                                                                                  |
+|------------------------------------|------------------------------------------------------------------------------------------------------|
+| CONTEXT.md (full glossary)         | https://github.com/KM-Alee/naqsha/blob/main/CONTEXT.md                                              |
+| AGENTS.md (maintainer rules)       | https://github.com/KM-Alee/naqsha/blob/main/AGENTS.md                                               |
+| ADR 0006: Autonomous updates       | https://github.com/KM-Alee/naqsha/blob/main/docs/adr/0006-autonomous-updates-with-rollback.md       |
+| ADR 0008: Rich TUI                 | https://github.com/KM-Alee/naqsha/blob/main/docs/adr/0008-rich-tui-for-agent-workbench.md           |
+| ADR 0009: Decorator-Driven API     | https://github.com/KM-Alee/naqsha/blob/main/docs/adr/0009-decorator-driven-api.md                   |
+| ADR 0011: Dynamic Memory Engine    | https://github.com/KM-Alee/naqsha/blob/main/docs/adr/0011-dynamic-memory-engine.md                  |
+| ADR 0012: Multi-agent teams        | https://github.com/KM-Alee/naqsha/blob/main/docs/adr/0012-multi-agent-teams-and-memory-scopes.md    |
+| ADR 0013: Tool-Based Delegation    | https://github.com/KM-Alee/naqsha/blob/main/docs/adr/0013-tool-based-delegation-model.md            |
+| ADR 0014: Hierarchical QAOA Trace  | https://github.com/KM-Alee/naqsha/blob/main/docs/adr/0014-hierarchical-qaoa-trace.md                |
+| ADR 0015: Typed Event Bus          | https://github.com/KM-Alee/naqsha/blob/main/docs/adr/0015-typed-event-bus.md                        |
+| ADR 0016: AgentContext injection   | https://github.com/KM-Alee/naqsha/blob/main/docs/adr/0016-context-aware-dependency-injection.md     |
+| ADR 0017: Thin Adapters            | https://github.com/KM-Alee/naqsha/blob/main/docs/adr/0017-strict-internal-protocol-thin-adapters.md |
+| ADR 0018: Circuit Breakers         | https://github.com/KM-Alee/naqsha/blob/main/docs/adr/0018-structured-error-escalation-circuit-breakers.md |
+| ADR 0019: Src layout               | https://github.com/KM-Alee/naqsha/blob/main/docs/adr/0019-domain-driven-src-layout.md               |
+| PRD V2 runtime                     | https://github.com/KM-Alee/naqsha/blob/main/docs/prd/0002-naqsha-v2-runtime.md                      |
+
+---
+
+## 21. Source file index
+
+All production source lives under `src/naqsha/`. Tests are in `tests/`. Docs source is in
+`docs/`. Configuration files are at the repo root.
+
+```
+src/naqsha/
+├── __init__.py                     Public API (re-exports)
+├── cli.py                          CLI argument parsing and dispatch
+├── wiring.py                       build_runtime, build_trace_replay_runtime
+├── profiles.py                     naqsha.toml + .json Run Profile parsing
+├── project.py                      .naqsha/ filesystem layout helpers
+├── eval_fixtures.py                Schema-versioned eval fixture save/load
+├── trace_scan.py                   List traces by mtime
+├── py.typed                        PEP 561 typed package marker
+│
+├── core/
+│   ├── runtime.py                  CoreRuntime: main run loop
+│   ├── events.py                   All 14 Pydantic event models
+│   ├── event_bus.py                RuntimeEventBus
+│   ├── policy.py                   Tool Policy: allow/deny/approval rules
+│   ├── scheduler.py                Serial + parallel tool scheduler
+│   ├── circuit_breaker.py          Circuit Breaker (consecutive failure tracking)
+│   ├── budgets.py                  BudgetMeter: hard budget caps
+│   └── approvals.py                StaticApprovalGate, InteractiveApprovalGate
+│
+├── models/
+│   ├── nap.py                      NAP V2 protocol (NAPAction, NAPAnswer, SpanContext)
+│   ├── factory.py                  model_client_from_profile
+│   ├── trace_turns.py              QAOA Trace → neutral provider transcript
+│   ├── openai_compat.py            OpenAI / Azure / Together thin adapter
+│   ├── anthropic.py                Anthropic Claude thin adapter
+│   ├── gemini.py                   Google Gemini thin adapter
+│   ├── ollama.py                   Ollama thin adapter
+│   ├── trace_replay.py             TraceReplayModelClient (deterministic replay)
+│   ├── http_json.py                JSON POST, header redaction, HTTP error handling
+│   └── errors.py                   ModelInvocationError
+│
+├── tools/
+│   ├── decorator.py                @agent.tool decorator; schema generation at import time
+│   ├── registry.py                 ToolRegistry: holds tools, exports schemas
+│   ├── executor.py                 ToolExecutor: AgentContext injection, error wrapping
+│   ├── context.py                  AgentContext: stable public API for tools
+│   ├── starter.py                  V2 Starter Tool Set (clock, read_file, etc.)
+│   ├── decorated_adapter.py        decorated_to_function_tool bridge
+│   ├── http_utils.py               stdlib HTTP helpers
+│   └── json_patch.py               RFC 6902 JSON Patch helpers
+│
+├── memory/
+│   ├── engine.py                   DynamicMemoryEngine (SQLite WAL + optional sqlite-vec)
+│   ├── scope.py                    MemoryScope: prefix enforcement at SQL level
+│   ├── ddl.py                      DDL safelist enforcement, ForbiddenDDLError
+│   ├── retrieval.py                MemoryRetriever: token-budgeted, keyword+recency ranking
+│   └── sharing.py                  TeamMemoryConfig, open_team_memory_engine
+│
+├── orchestration/
+│   ├── topology.py                 TeamTopology parsed from naqsha.toml
+│   ├── delegation.py               build_delegate_tool: nested worker CoreRuntime
+│   └── team_runtime.py             build_team_orchestrator_runtime, build_worker_runtime
+│
+├── tracing/
+│   ├── protocols/
+│   │   ├── qaoa.py                 V2 trace event models (QAOA_TRACE_SCHEMA_VERSION = 2)
+│   │   └── nap.py                  NAP V2 re-exports from models/nap.py
+│   ├── span.py                     Span, SpanContext, create_root_span()
+│   ├── store.py                    TraceStore: append-only JSONL, V1+V2 reads, V2 writes
+│   ├── sanitizer.py                ObservationSanitizer: runs before trace/memory/prompt
+│   └── replay.py                   nap_messages_from_trace, observations_by_call_id
+│
+├── reflection/
+│   ├── loop.py                     SimpleReflectionLoop
+│   ├── base.py                     ReflectionPatch, ReflectionPatchEventSink protocol
+│   ├── config.py                   ReflectionTomlSettings, load_reflection_toml_settings
+│   ├── rollback.py                 AutomatedRollbackManager: snapshot/restore lifecycle
+│   ├── reliability_gate.py         run_reliability_gate_subprocess (pytest runner)
+│   ├── workspace.py                create_isolated_workspace
+│   └── candidate.py                Deterministic patch artifact generation
+│
+├── tui/
+│   ├── app.py                      WorkbenchApp (textual.App): all panels, bus wiring
+│   ├── workbench.tcss              Workbench layout, theme, chrome
+│   ├── panels/
+│   │   ├── chat.py                 ChatPanel: streaming tokens
+│   │   ├── budget.py               BudgetPanel: live counters
+│   │   ├── span_tree.py            SpanTreePanel: expandable trace tree
+│   │   ├── flame.py                FlamePanel: per-agent wall time + tokens
+│   │   ├── memory.py               MemoryBrowserPanel: SQLite table viewer
+│   │   └── patch_review.py         PatchReviewPanel: Approve/Reject diff view
+│   └── wizard/
+│       ├── init.py                 naqsha init interactive wizard
+│       └── wizard.tcss             Init wizard layout and typography
+│
+└── workbench/                      AgentWorkbench facade (profiles, replay, eval, reflect)
+
+tests/
+├── core/                           CoreRuntime, policy, budget, circuit breaker tests
+├── models/                         Model adapter, NAP V2, trace_turns tests
+├── tools/                          Tool decorator, registry, executor, starter tests
+├── memory/                         DynamicMemoryEngine, scope, DDL, retrieval tests
+├── orchestration/                  TeamTopology, delegation, team_runtime tests
+├── tracing/                        TraceStore, sanitizer, span, replay tests
+├── reflection/                     Reflection loop, rollback, gate tests
+├── tui/                            TUI widget and panel tests (headless)
+└── redteam/                        OWASP LLM Top-10 adversarial corpus
+
+docs/
+├── index.md                        https://km-alee.github.io/naqsha/
+├── getting-started.md              https://km-alee.github.io/naqsha/getting-started/
+├── concepts.md                     https://km-alee.github.io/naqsha/concepts/
+├── tools.md                        https://km-alee.github.io/naqsha/tools/
+├── teams.md                        https://km-alee.github.io/naqsha/teams/
+├── memory.md                       https://km-alee.github.io/naqsha/memory/
+├── reflection.md                   https://km-alee.github.io/naqsha/reflection/
+├── cli.md                          https://km-alee.github.io/naqsha/cli/
+└── migration.md                    https://km-alee.github.io/naqsha/migration/
+
+naqsha.toml                         Reference Team Workspace configuration
+mkdocs.yml                          MkDocs-Material documentation config
+pyproject.toml                      Package metadata, deps, extras, build config
+CONTEXT.md                          Full glossary and vocabulary reference
+AGENTS.md                           Agent maintainer rules and module boundaries
+```
