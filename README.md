@@ -60,6 +60,54 @@ Most "agent frameworks" are wrappers around a chat API with a tool-calling loop 
 | **Runaway agents that stop themselves** | The **Circuit Breaker** trips on repeated identical tool failures and escalates cleanly to the orchestrator via structured `TaskFailedError` observations. |
 
 ---
+## Architecture
+
+```mermaid
+flowchart TD
+    subgraph public ["Public API"]
+        CLI["naqsha CLI"]
+        WB["AgentWorkbench"]
+        TUI["Workbench TUI"]
+    end
+
+    subgraph core ["Core Runtime (headless)"]
+        RT["CoreRuntime\n(run loop)"]
+        BUS["Typed Event Bus\n(RuntimeEventBus)"]
+        POLICY["Tool Policy +\nApproval Gate"]
+        BUDGET["Budget Meter"]
+        CB["Circuit Breaker"]
+        SCHED["Tool Scheduler"]
+    end
+
+    subgraph adapters ["Adapters"]
+        MODELS["Model Adapters\n(OpenAI / Anthropic / Gemini / Ollama / Fake)"]
+        TOOLS["Tool Registry +\nDecorator-Driven API"]
+        MEM["Dynamic Memory Engine\n(MemoryScope, DDL safelist)"]
+        TRACE["Hierarchical QAOA\nTrace Store"]
+    end
+
+    subgraph teams ["Orchestration"]
+        TOPO["TeamTopology\n(naqsha.toml)"]
+        DELEG["Tool-Based\nDelegation"]
+    end
+
+    subgraph safety ["Safety"]
+        SANIT["Observation\nSanitizer"]
+        REFL["Reflection Loop +\nRollback Manager"]
+    end
+
+    CLI --> WB & RT
+    WB --> RT
+    TUI --> BUS
+    RT --> BUS & POLICY & BUDGET & CB & SCHED
+    POLICY --> TOOLS
+    SCHED --> TOOLS
+    RT --> MODELS & TRACE
+    TOOLS --> MEM
+    RT --> SANIT
+    SANIT --> TRACE & MEM & MODELS
+    TOPO --> DELEG --> RT
+```
 
 ## Feature overview
 
@@ -598,54 +646,6 @@ api_key_env = "OPENAI_API_KEY"   # env var name — NEVER the key itself
 
 ---
 
-## Architecture
-
-```mermaid
-flowchart TD
-    subgraph public ["Public API"]
-        CLI["naqsha CLI"]
-        WB["AgentWorkbench"]
-        TUI["Workbench TUI"]
-    end
-
-    subgraph core ["Core Runtime (headless)"]
-        RT["CoreRuntime\n(run loop)"]
-        BUS["Typed Event Bus\n(RuntimeEventBus)"]
-        POLICY["Tool Policy +\nApproval Gate"]
-        BUDGET["Budget Meter"]
-        CB["Circuit Breaker"]
-        SCHED["Tool Scheduler"]
-    end
-
-    subgraph adapters ["Adapters"]
-        MODELS["Model Adapters\n(OpenAI / Anthropic / Gemini / Ollama / Fake)"]
-        TOOLS["Tool Registry +\nDecorator-Driven API"]
-        MEM["Dynamic Memory Engine\n(MemoryScope, DDL safelist)"]
-        TRACE["Hierarchical QAOA\nTrace Store"]
-    end
-
-    subgraph teams ["Orchestration"]
-        TOPO["TeamTopology\n(naqsha.toml)"]
-        DELEG["Tool-Based\nDelegation"]
-    end
-
-    subgraph safety ["Safety"]
-        SANIT["Observation\nSanitizer"]
-        REFL["Reflection Loop +\nRollback Manager"]
-    end
-
-    CLI --> WB & RT
-    WB --> RT
-    TUI --> BUS
-    RT --> BUS & POLICY & BUDGET & CB & SCHED
-    POLICY --> TOOLS
-    SCHED --> TOOLS
-    RT --> MODELS & TRACE
-    TOOLS --> MEM
-    RT --> SANIT
-    SANIT --> TRACE & MEM & MODELS
-    TOPO --> DELEG --> RT
-```
 
 ### Module ownership
 
