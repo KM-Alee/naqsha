@@ -9,6 +9,7 @@
 [![CI](https://github.com/KM-Alee/naqsha/actions/workflows/ci.yml/badge.svg)](https://github.com/KM-Alee/naqsha/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-km--alee.github.io%2Fnaqsha-blue)](https://km-alee.github.io/naqsha/)
+[![LLM reference](https://img.shields.io/badge/llm.txt-feed%20to%20agent-blueviolet)](https://km-alee.github.io/naqsha/llm.txt)
 
 </div>
 
