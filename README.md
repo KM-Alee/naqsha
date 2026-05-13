@@ -5,7 +5,6 @@
 **Inspectable Python agent runtime with strict tool contracts, hierarchical traces, dynamic memory, and a rich Workbench TUI.**
 
 [![PyPI version](https://img.shields.io/pypi/v/naqsha.svg?color=blue)](https://pypi.org/project/naqsha/)
-[![Python versions](https://img.shields.io/pypi/pyversions/naqsha.svg)](https://pypi.org/project/naqsha/)
 [![CI](https://github.com/KM-Alee/naqsha/actions/workflows/ci.yml/badge.svg)](https://github.com/KM-Alee/naqsha/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-km--alee.github.io%2Fnaqsha-blue)](https://km-alee.github.io/naqsha/)
